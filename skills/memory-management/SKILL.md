@@ -5,6 +5,12 @@ description: Safely use the pi-memory tools (memory_manage, memory_search) and /
 
 # Memory Management
 
+> **Prerequisite:** this skill requires a memory extension in the project that
+> provides the `memory_manage` / `memory_search` tools and the `/memories`
+> command (e.g. a `.pi/extensions/memory.ts` or a dedicated `pi-memory`
+> package). Without it, the tools/commands below do not exist — the skill is
+> inert. `pi-dev-harness` ships the guidance, not the extension.
+
 pi-memory keeps high-signal, user-approved knowledge across sessions. It is a
 harness feature, not a knowledge oracle.
 

@@ -25,7 +25,8 @@ Harness: `build/audit/extend-pi-harness`, `harness-review`, `harness-team-review
 `harness-evolve`, `harness-engineering-setup`.
 Workflow: `grill-with-docs`, `to-spec`, `to-tickets`, `implement`, `code-review`,
 `diagnose`, `handoff`, `session-review`, `prepare-tickets`, `implement-all`,
-`commit-ready`, `release`, `ui-polish`, `fe-polish`, `memory-audit`, `tui-polish`.
+`commit-ready`, `release`, `ui-polish`, `fe-polish`, `wayfinder`, `memory-audit`,
+`tui-polish`.
 
 ## Install
 
@@ -41,11 +42,25 @@ Add to `~/.pi/agent/npm/package.json` dependencies and install:
 Pi discovers the package's `skills/` and `prompts/` via the `"pi"` field in
 `package.json`. Reload Pi (`/reload`) and the skills/prompts appear.
 
+## Prerequisites & optional extensions
+
+This package ships **skills and prompts only** — no extensions. Most resources
+work standalone, but a few lean on capabilities a project must provide:
+
+| Resource | Needs | If absent |
+| --- | --- | --- |
+| `memory-management`, `memory-audit` | a memory extension (`memory_manage`/`memory_search` tools, `/memories` command) | inert — skill/prompt say so and stop |
+| `batch-implementation`, `implement-all` | `ticket-runner` extension (`/implement-all` command) | **degrades gracefully** — the skill runs the batch loop manually |
+| subagent-assisted prompts (`harness-team-review`, `code-review`…) | `pi-subagents` package | falls back to single-agent flow |
+| research in workflow prompts | `pi-web-access` package (`web_search`/`fetch_content`) | skip web steps |
+
 ## Notes
 
 - Project identity, TUI/theme, and product-specific extensions stay in each
   project's `AGENTS.md` and `.pi/` — this package ships only portable resources.
 - Adapt the "Project fit" section of `react-best-practices` per project.
+- Memory as a full capability (extension + lib + tests) is a candidate for its
+  own future `pi-memory` package, not this one.
 
 ## License
 
