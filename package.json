@@ -1,0 +1,29 @@
+{
+  "name": "pi-dev-harness",
+  "version": "0.1.0",
+  "description": "Reusable Pi coding harness: engineering-workflow, harness design, git/release discipline, ticketing, design and web-frontend skills, plus the slash-command prompts that drive them.",
+  "license": "MIT",
+  "type": "module",
+  "keywords": [
+    "pi-package",
+    "pi",
+    "pi-coding-agent",
+    "harness",
+    "engineering-workflow",
+    "skills",
+    "prompts"
+  ],
+  "files": [
+    "skills/**/*",
+    "prompts/**/*",
+    "README.md"
+  ],
+  "pi": {
+    "skills": [
+      "./skills"
+    ],
+    "prompts": [
+      "./prompts"
+    ]
+  }
+}
