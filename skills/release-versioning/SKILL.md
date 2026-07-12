@@ -6,10 +6,11 @@ description: "Semantic versioning and release discipline for apps with a single 
 # Release & Versioning
 
 Standard for releasing an app version. The project keeps ONE source of
-truth for versions and user-facing release notes (this repo:
-`src/lib/releases.ts` — `RELEASES` newest-first, `APP_VERSION` derived);
+truth for versions and user-facing release notes — a single releases module
+(e.g. `src/lib/releases.ts`: `RELEASES` newest-first, `APP_VERSION` derived);
 `package.json.version` is synced to it at release time. Git tags and
-commit messages remain the technical history for developers.
+commit messages remain the technical history for developers. Record the
+project's actual releases path in `AGENTS.md`.
 
 ## SemVer
 

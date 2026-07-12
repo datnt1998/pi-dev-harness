@@ -16,8 +16,9 @@ Follow exactly this order:
    notes rules.
 3. **Approve** — show version + notes draft and WAIT for the user to
    approve or edit the wording. Write nothing before approval.
-4. **Write** — prepend the approved entry to `RELEASES` in
-   `src/lib/releases.ts`, sync `package.json.version`, run tests + build
+4. **Write** — prepend the approved entry to `RELEASES` in the project's
+   releases source of truth (e.g. `src/lib/releases.ts`, per `AGENTS.md`),
+   sync `package.json.version`, run tests + build
    again, then commit `chore(release): vX.Y.Z` and create annotated tag
    `vX.Y.Z`. Nothing unrelated goes into this commit.
 5. **Report** — confirm version, tag, and remaining follow-ups
