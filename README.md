@@ -18,6 +18,7 @@ inherit disciplined engineering workflow.
 - **wayfinder** — chart oversized/foggy efforts as investigation maps
 - **memory-management** — safe use of persistent memory tools
 - **react-best-practices** — perf + architecture for React/Vite SPAs
+- **react-doctor** — deterministic CLI scan of `src/` (state/effect, perf, arch, security, a11y) + triage
 - **make-interfaces-feel-better** — design-engineering UI polish
 
 ### Prompts (`/name`)
@@ -25,8 +26,8 @@ Harness: `build/audit/extend-pi-harness`, `harness-review`, `harness-team-review
 `harness-evolve`, `harness-engineering-setup`.
 Workflow: `grill-with-docs`, `to-spec`, `to-tickets`, `implement`, `code-review`,
 `diagnose`, `handoff`, `session-review`, `prepare-tickets`, `implement-all`,
-`commit-ready`, `release`, `ui-polish`, `fe-polish`, `wayfinder`, `memory-audit`,
-`tui-polish`.
+`commit-ready`, `release`, `ui-polish`, `fe-polish`, `react-doctor`, `wayfinder`,
+`memory-audit`, `tui-polish`.
 
 ## Install
 
@@ -53,6 +54,7 @@ work standalone, but a few lean on capabilities a project must provide:
 | `batch-implementation`, `implement-all` | `ticket-runner` extension (`/implement-all` command) | **degrades gracefully** — the skill runs the batch loop manually |
 | subagent-assisted prompts (`harness-team-review`, `code-review`…) | `pi-subagents` package | falls back to single-agent flow |
 | research in workflow prompts | `pi-web-access` package (`web_search`/`fetch_content`) | skip web steps |
+| `react-doctor` (skill + prompt) | the `react-doctor` npm CLI, run on demand via `npx` (no dep) + a React `src/` tree | inert on non-React projects; no install needed elsewhere |
 
 ## Notes
 
