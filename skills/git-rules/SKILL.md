@@ -31,7 +31,7 @@ Use this skill whenever work reaches a commit boundary, especially after `/imple
      - checks run
      - review result
      - proposed commit type/scope/message
-   - If the user says `commit`, `commit it`, `ok commit`, or gave explicit per-ticket commit permission, stage only intended files and commit.
+   - If the user says `commit`, `commit it`, `ok commit`, or gave explicit per-ticket/batch commit permission, stage only intended files and commit without asking again.
 
 ## Commit Flow
 
@@ -59,21 +59,7 @@ Use Conventional Commit type:
 - `perf` — performance improvement
 - `ci` — CI configuration
 
-Recommended scopes for this project:
-
-- `app`
-- `shell`
-- `theme`
-- `settings`
-- `todo`
-- `notes`
-- `bookmarks`
-- `pomodoro`
-- `habits`
-- `storage`
-- `harness`
-- `docs`
-- `build`
+Choose scopes from repository evidence: existing Conventional Commits, workspace/package names, bounded contexts, or `AGENTS.md`. If no convention exists, use a stable module/domain noun (for example `api`, `cli`, `auth`, `storage`, `harness`, `docs`, `build`) or omit the scope rather than inventing project taxonomy.
 
 ### 3. Propose message
 
@@ -86,10 +72,10 @@ Format:
 Examples:
 
 ```txt
-build(app): scaffold vite react dashboard
-feat(settings): persist board theme preferences
-feat(todo): add kanban board with task dialog
-fix(pomodoro): pause after switching timer phase
+build(cli): add repository-native packaging
+feat(auth): add session revocation
+fix(api): reject malformed pagination tokens
+chore(harness): refresh reusable workflow resources
 ```
 
 ### 4. Stage precisely
@@ -109,7 +95,7 @@ git add -p <file>
 ### 5. Commit
 
 ```bash
-git commit -m "build(app): scaffold vite react dashboard"
+git commit -m "fix(api): reject malformed pagination tokens"
 ```
 
 ## Commit-Ready Summary Template
@@ -123,7 +109,7 @@ Changed files:
 - `path`
 
 Checks:
-- `npm run build` — pass
+- `<repository-native validation command>` — pass
 
 Review:
 - reviewer/self-review result
@@ -147,13 +133,7 @@ Ask before commit if:
 
 ## Final Response Behavior
 
-When not committing:
-
-- End with the proposed commit message and ask if the user wants to commit.
-
-When committing:
-
-- Report commit hash, message, checks, and any uncommitted remaining changes.
+Default to one terse checkpoint line. If commit permission is absent, propose the message and ask once. If already authorized, commit without re-confirming and report hash/message/checks/remaining changes. Commit permission never implies push, publish, release, deploy, migration, or destructive cleanup.
 
 ## Merge/Rebase Conflicts
 

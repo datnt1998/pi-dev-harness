@@ -1,10 +1,10 @@
 ---
-description: Create a compact handoff note for another session or agent
+description: Create a durable continuation artifact with validation evidence for another session or agent
 argument-hint: "[task]"
 ---
 
 Use `/skill:engineering-workflow` phase `handoff`.
 
-Task: ${1:-current session}
+Task: $ARGUMENTS
 
-Summarize goal, current status, files changed, decisions, validation, risks, next steps, and useful commands. Keep it concise and actionable.
+Create the durable handoff defined by `references/handoff.md` and `references/completion-evidence.md`: goal, status, files, decisions, acceptance evidence, checks, risks, unverified areas, next steps, useful commands. Compact but specific.

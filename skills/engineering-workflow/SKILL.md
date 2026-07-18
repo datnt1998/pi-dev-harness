@@ -19,6 +19,7 @@ When the work involves changing Pi resources (`AGENTS.md`, `.pi/APPEND_SYSTEM.md
 4. **Separate generation from review** — implementation and review should be separate phases; use subagents where useful.
 5. **Commit-ready checkpoints** — after each successful implementation, use `/skill:git-rules` to inspect git state and propose a standards-compliant commit.
 6. **Handoff as a first-class artifact** — long work should end with a compact continuation note.
+7. **Approve once, execute fully** — approved reversible scope runs through implementation, validation, review, fixes, and checkpoint without intermediate confirmation. Read `references/autonomous-execution.md` when execution authority matters.
 
 ## Invocation Modes
 
@@ -127,7 +128,7 @@ Output artifacts:
 
 ### Implement
 
-Read `references/implementation-tdd.md`.
+Read `references/implementation-tdd.md`, `references/autonomous-execution.md`, and `references/completion-evidence.md`.
 
 Rules:
 - Do not implement a large ambiguous plan without approval.
@@ -138,7 +139,7 @@ Rules:
 
 ### Code Review
 
-Read `references/code-review.md`.
+Read `references/code-review.md` and `references/completion-evidence.md`.
 
 Review axes:
 - **Standards** — repo conventions, maintainability, smell baseline.
@@ -155,9 +156,9 @@ Loop:
 
 ### Handoff
 
-Read `references/handoff.md`.
+Read `references/handoff.md` and `references/completion-evidence.md`.
 
-Output a compact document with goal, state, decisions, files changed, tests, risks, and next steps.
+Output a compact continuation artifact with goal, state, decisions, files changed, validation evidence, risks, and next steps.
 
 ## Safety
 
@@ -171,13 +172,10 @@ Output a compact document with goal, state, decisions, files changed, tests, ris
 Load only when needed:
 
 - `references/pi-harness-integration.md` — boundary and handoff between engineering workflow and Pi harness work.
+- `references/autonomous-execution.md` — approval envelope, stop conditions, batched questions, terse reporting.
+- `references/completion-evidence.md` — acceptance-to-evidence completion contract.
 - `references/research.md` — source-backed research flow using `pi-web-access` and `researcher`.
 
 ## Done Criteria
 
-For engineering tasks, final response should mention:
-
-- What changed.
-- What was validated.
-- What remains risky or unverified.
-- Suggested next action.
+For engineering tasks, follow `references/completion-evidence.md`. Default to one terse status line; expand only failures, blockers, decisions, risks, or unverified behavior.

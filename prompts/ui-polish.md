@@ -6,8 +6,8 @@ argument-hint: "[file or component]"
 Use `/skill:make-interfaces-feel-better` to review and polish the web UI for ${1:-the current component}.
 
 Scope:
-- Target the React/Tailwind/motion frontend under `src/` (NOT the Pi terminal UI — use `/tui-polish` for that).
-- If no target is given, ask which component/file to polish before editing.
+- Discover the repository's React/Tailwind/motion frontend root (NOT the Pi terminal UI — use `/tui-polish` for that).
+- If no target is given, infer it from the current diff; ask only when ambiguity changes scope.
 
 Apply the skill's principles, prioritizing what this stack supports:
 - Concentric border radius on nested surfaces (outer = inner + padding).

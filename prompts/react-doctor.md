@@ -1,5 +1,5 @@
 ---
-description: Scan the React frontend (src/) with react-doctor, then triage and fix diagnostics by severity
+description: Scan a React frontend with react-doctor, then triage and fix diagnostics by severity
 argument-hint: "[changed|full|<area>] (default: changed)"
 ---
 
@@ -13,13 +13,9 @@ Rules:
 - For a full triage pass, fetch and follow the canonical playbook from the skill
   (`https://www.react.doctor/prompts/react-doctor-agent.md`); it edits the working
   tree but never commits.
-- Fix by severity (errors first, then warnings). Keep edits small and reversible
-  and honor project conventions (ADR-0017 flat/no-shadow, pastel chips never
-  accent/CTA, Vietnamese UI copy, files under ~200 lines).
+- Fix by severity (errors first, then warnings). Keep edits small/reversible and honor repository visual, copy, accessibility, architecture, and file-size conventions.
 - This CLI runs via `npx` and needs network; if it is unavailable, say so and
   fall back to `/skill:react-best-practices`. Note `--no-telemetry` also disables
   the numeric score, so omit it when the regression gate compares scores; use it
   only for privacy-first scans triaged by severity counts.
-- After fixing, re-run `--scope changed` plus `npm run test` + `npm run build`,
-  then prepare a commit-ready checkpoint via `/skill:git-rules` (do not commit
-  without the user's go-ahead).
+- After fixing, re-run `--scope changed` plus the repository's test/build checks, then prepare a commit-ready checkpoint via `/skill:git-rules`.

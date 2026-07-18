@@ -1,7 +1,7 @@
 {
   "name": "pi-dev-harness",
-  "version": "0.1.0",
-  "description": "Reusable Pi coding harness: engineering-workflow, harness design, git/release discipline, ticketing, design and web-frontend skills, plus the slash-command prompts that drive them.",
+  "version": "0.2.0",
+  "description": "Reusable Pi engineering harness with autonomous workflow, safety guardrails, skills, prompts, and ticket-runner tools.",
   "license": "MIT",
   "type": "module",
   "keywords": [
@@ -11,14 +11,37 @@
     "harness",
     "engineering-workflow",
     "skills",
-    "prompts"
+    "prompts",
+    "extensions"
   ],
   "files": [
+    "extensions/**/*",
+    "lib/**/*",
     "skills/**/*",
     "prompts/**/*",
-    "README.md"
+    "templates/**/*",
+    "scripts/**/*",
+    "README.md",
+    "LICENSE"
   ],
+  "scripts": {
+    "test": "node --experimental-strip-types --test tests/*.test.ts",
+    "pack:check": "npm pack --dry-run",
+    "smoke:installed": "node scripts/sdk-smoke.mjs",
+    "smoke:packed": "node scripts/packed-smoke.mjs"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "peerDependencies": {
+    "@earendil-works/pi-ai": "*",
+    "@earendil-works/pi-coding-agent": "*",
+    "typebox": "*"
+  },
   "pi": {
+    "extensions": [
+      "./extensions"
+    ],
     "skills": [
       "./skills"
     ],

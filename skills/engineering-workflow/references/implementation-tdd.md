@@ -6,15 +6,17 @@ Use this reference when implementing an approved spec or ticket.
 
 Before editing:
 
-- Confirm the target spec/ticket or user-approved plan.
-- Identify affected files and test surfaces.
-- If unclear, use `scout` or ask a targeted question.
+- Bind work to the approved spec/ticket/plan.
+- Identify affected files, repository/workspace root, and test surfaces from repository evidence.
+- In a monorepo, bind the slice to one declared working directory; use ticket-level validation there before root-wide checks.
+- If ambiguity blocks safe execution, use `scout`, continue independent work, then ask one batched question set.
+- Follow `autonomous-execution.md` and `completion-evidence.md`.
 
 ## Seams — where tests go
 
 A **seam** is the public boundary you test at: the interface where you observe behavior without reaching inside. Tests live at seams, never against internals.
 
-**Test only at pre-agreed seams.** Before writing tests, write down the seams under test and confirm them with the user (or the ticket's acceptance criteria). Agreeing the seams up front puts testing effort on critical paths and complex logic instead of every edge case. Ask: "What's the public interface, and which seams should we test?"
+**Test only at approved seams.** Ticket acceptance criteria or an existing public interface are sufficient approval; do not ask again. Ask only when the seam itself requires an unapproved product/API/architecture decision.
 
 For what makes a test good or bad (implementation-coupled, tautological, horizontal slicing) and when to mock, read `tests-and-mocking.md` (same directory). For designing the module shape itself, use `/skill:codebase-design`.
 
@@ -50,7 +52,7 @@ Prefer, in order:
 - lint
 - full test suite
 
-Use repository conventions from `package.json`, README, AGENTS.md, or existing scripts.
+Use repository conventions from `AGENTS.md`, `CONTRIBUTING.md`, README, workspace/build manifests, CI, and existing scripts. Do not assume Node/npm. For monorepos, prefer the smallest affected workspace commands; use root-wide checks only when required by the ticket or repository gate.
 
 ## Subagents
 
@@ -74,12 +76,4 @@ Useful patterns:
 
 ## Final Summary
 
-Include:
-
-- files changed
-- behavior changed
-- checks run and results
-- review result
-- unverified areas
-- proposed Conventional Commit message from `/skill:git-rules`
-- next recommended action
+Use `completion-evidence.md`. Happy path: one terse line plus proposed commit. Expand only failures, blockers, decisions, residual risks, or unverified areas.

@@ -1,71 +1,68 @@
 ---
 name: release-versioning
-description: "Semantic versioning and release discipline for apps with a single releases source of truth: SemVer bumps, release gate (clean tree, green tests, clean build, approved notes), professional user-facing release notes, chore(release) commits and annotated git tags. Use when the user runs /release, asks to bump a version, publish a release, or write release notes."
+description: "Repository-aware release discipline: discover the project's versioning and release contract, gate validation, draft approved notes, synchronize declared version sources, and create only the repository-authorized commit/tag. Use for version bumps, release notes, publishing, or releases."
 ---
 
-# Release & Versioning
+# Release and Versioning
 
-Standard for releasing an app version. The project keeps ONE source of
-truth for versions and user-facing release notes — a single releases module
-(e.g. `src/lib/releases.ts`: `RELEASES` newest-first, `APP_VERSION` derived);
-`package.json.version` is synced to it at release time. Git tags and
-commit messages remain the technical history for developers. Record the
-project's actual releases path in `AGENTS.md`.
+Run releases from repository evidence, never from package defaults or memory. This skill works across ecosystems and monorepos; project-specific facts belong in `AGENTS.md`, `CONTRIBUTING.md`, or another documented release contract.
 
-## SemVer
+## Required project contract
 
-- Versions are always full `MAJOR.MINOR.PATCH` (display included).
-- **MINOR** (second number): a feature release — anything users can see
-  or do that they could not before.
-- **PATCH** (third number): fixes, polish, small updates with no new
-  capability.
-- **MAJOR**: only when the user explicitly declares it (e.g. 1.0.0 launch
-  or a breaking re-imagining). Never bump major on your own.
+Before any release write, identify:
 
-## Release Gate — all must pass BEFORE any write
+- versioning policy (SemVer or repository-defined equivalent);
+- authoritative version source(s) and selected workspace/package;
+- release-notes/changelog source, or an explicit declaration that none exists;
+- exact test/static-check/build/package commands and working directories;
+- release commit and tag conventions;
+- remote/publish procedure and the exact deploy trigger;
+- rollback and post-release smoke procedure.
 
-1. Working tree is clean (`git status`).
-2. Tests green (`npm run test`).
-3. Build clean (`npm run build`).
-4. Release notes drafted AND approved by the user.
+Use `templates/PROJECT_SETUP.md` when bootstrapping this contract. If a material fact is absent or contradictory, inspect primary repository evidence, then ask one batched question set. You may draft a proposal, but do not change versions, commit, tag, push, publish, or deploy.
 
-If any gate fails: stop and report. Never release over a dirty tree or
-red tests.
+## Version decision
 
-## Release notes rules (user-facing, Vietnamese)
+Follow the repository's policy. For SemVer projects:
 
-- Write for the end user, professionally. Never technical: no
-  "refactor", "seam", "component", commit hashes, or file names.
-- Start each line with a verb: "Thêm…", "Cải thiện…", "Sửa lỗi…".
-- Describe user value, not code: ❌ "Refactor recurrence seam" →
-  ✅ "Việc lặp lại giữ đúng chuỗi khi bạn hoàn thành trễ".
-- No emoji overload, no abbreviations, no slang. Product terms follow
-  the project glossary (CONTEXT.md).
-- Order: new features → improvements → fixes.
-- 3–6 lines for a minor release; 1–2 lines for a patch.
-- Notes are data, not a file dump: one entry `{ version, date, notes[] }`
-  prepended to `RELEASES`. `date` is the RELEASE day (`YYYY-MM-DD`,
-  local calendar), never a build timestamp.
+- `MAJOR`: breaking compatibility or an explicit major launch; never infer casually.
+- `MINOR`: backward-compatible user/developer capability.
+- `PATCH`: backward-compatible correction or polish.
 
-## Release mechanics
+Honor an explicit user bump only when compatible with repository policy. Use changes since the last relevant release fixed point; in a monorepo, scope history to the selected package where possible.
 
-- One release = one commit + one tag, nothing else mixed in:
-  - Commit message: `chore(release): vX.Y.Z`
-  - Annotated tag: `git tag -a vX.Y.Z -m "vX.Y.Z"` on that commit.
-- Writes in the release commit: new `RELEASES` entry + `package.json`
-  version sync. Nothing else.
-- Tags stay local until the repo has a remote; then push with
-  `git push --follow-tags`.
-- Deriving the bump: read `git log <last-tag>..HEAD` (no tags yet →
-  summarize at product level; do NOT enumerate every commit). `feat:`
-  commits suggest minor; only `fix:`/`polish:`/`docs:` suggest patch.
+## Release gate — before writes
 
-## Agent conduct
+1. Intended repository/workspace and fixed point are explicit.
+2. Working tree/index are clean, unless the documented release process intentionally creates the release diff in a controlled branch.
+3. Every contract-required validation command passes in its declared working directory.
+4. Version-source and notes-source updates are known and internally consistent.
+5. User approves the exact target version and release-note wording.
+6. `/skill:release-check` has no unresolved applicable blocker.
 
-- NEVER release on your own initiative. After a large feature batch
-  ships, REMIND the user that a release may be warranted and offer
-  `/release` — then wait.
-- Never invent notes content the user has not seen: always show the
-  draft and wait for approval before writing anything.
-- After the release commit, report: new version, tag name, and any
-  follow-up steps (e.g. deploy/PWA refresh).
+Stop on failed or unavailable required evidence. Never substitute `npm test`/`npm build` unless those are the repository's actual commands.
+
+## Release notes
+
+Follow the project locale, audience, format, and source of truth. For user-facing applications when no stricter format exists:
+
+- explain user value, not implementation details;
+- order features → improvements → fixes;
+- use concise action-led lines and product glossary terms;
+- avoid commit hashes, internal file names, and unexplained jargon;
+- use the release date in the project's declared timezone.
+
+Never create a parallel changelog or release module when the repository already has an authority. If the project explicitly has no persisted notes source, report notes in the approved release surface only.
+
+## Mechanics
+
+- Change only declared version/notes/generated lock or metadata sources required by the repository process.
+- Re-run required validation after version writes.
+- Inspect the exact release diff before staging.
+- Use the repository's commit/tag convention; a common default is `chore(release): vX.Y.Z` plus annotated `vX.Y.Z`, but do not impose it over documented conventions.
+- Commit/tag permission does not authorize push, publish, deploy, credentials, migration, or production access.
+- Before any push, re-read the exact deploy trigger from repository evidence and ask for explicit approval. A tag push may itself be production deployment.
+
+## Final report
+
+Report version/workspace, changed authorities, validation, commit/tag state, and separately authorized remaining actions. Happy path is one terse line; expand blockers, unknown release facts, production risk, or rollback gaps.

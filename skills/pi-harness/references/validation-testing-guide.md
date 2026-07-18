@@ -12,8 +12,9 @@ Use this checklist after changing Pi resources.
 - New prompt files appear as slash commands.
 - New skills appear as `/skill:<name>`.
 - New extension commands appear in slash autocomplete.
-- New tools do not conflict with package tools.
-- Theme name matches `.pi/settings.json`.
+- New tools do not conflict with package/project tools.
+- `safe-ops` loads once; ticket-runner commands and `batch_next`/`batch_report` load once.
+- Theme name matches `.pi/settings.json` when a project theme exists.
 
 ## UI Checks
 
@@ -44,3 +45,11 @@ Look for:
 - Extensions with stale status widgets after reload.
 - Duplicate tools from local extensions and installed packages.
 - Overly large `AGENTS.md` or `APPEND_SYSTEM.md` content that should move to skills.
+
+## Package Checks
+
+- `npm test` passes in the package.
+- `npm pack --dry-run` includes extensions, libs, skills, prompts, templates, README, and LICENSE.
+- Consumer SDK reload has zero extension/resource diagnostics and tool-name conflicts.
+- Copied local skill/prompt names are removed or backed up after package cutover.
+- Product identity, TUI/theme, memory implementation, credentials, and deploy rules stay in consumer-owned resources unless separately packaged.

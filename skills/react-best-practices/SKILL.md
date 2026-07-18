@@ -5,11 +5,7 @@ description: "React performance and architecture best practices: eliminating wat
 
 # React Best Practices
 
-Curated performance + architecture rules for React SPAs.
-Adapted for Pi from vercel-labs/agent-skills `react-best-practices` and
-`composition-patterns` (MIT, Vercel Engineering). Server/RSC/Next-only rules
-were dropped; this codebase is a **Vite + React SPA** — where a rule says
-`next/dynamic`, use `React.lazy` + `Suspense`; ignore RSC asides.
+Curated performance + architecture rules for browser-focused React applications. Adapted for Pi from vercel-labs/agent-skills `react-best-practices` and `composition-patterns` (MIT, Vercel Engineering). First detect the project's React version and framework. These references omit most server/RSC-specific guidance; in Next/Remix or server-rendered apps, follow framework boundaries and skip any SPA advice that conflicts with them.
 
 ## How to use
 
@@ -31,7 +27,6 @@ were dropped; this codebase is a **Vite + React SPA** — where a rule says
 | 5 | [client.md](references/client.md) | MEDIUM | event listeners, localStorage, request dedup |
 | 6 | [composition.md](references/composition.md) | MEDIUM | component APIs, boolean-prop sprawl, compound components, React 19 ref-as-prop |
 | 7 | [js.md](references/js.md) | LOW-MED | hot loops, string/array work, Set/Map lookups |
-| 8 | [advanced.md](references/advanced.md) | LOW | effect deps, event handler refs, init-once patterns |
 
 ## Non-negotiables (always active, no reference read needed)
 
@@ -42,14 +37,11 @@ were dropped; this codebase is a **Vite + React SPA** — where a rule says
 - `Promise.all` for independent async work (`async-parallel`).
 - Import concrete modules, not barrels (`bundle-barrel-imports`).
 - Prefer explicit variant props / compound components over boolean-prop accretion (`architecture-avoid-boolean-props`).
-- React 19: `ref` is a normal prop — no `forwardRef` in new code (`react19-no-forwardref`).
+- On React 19+, `ref` is a normal prop; on React 18 or earlier, keep the framework-compatible `forwardRef` pattern (`react19-no-forwardref`).
 
-## Project fit
+## Project integration
 
-- Pure logic lives in plain `.ts` modules (deep-module seams per
-  `/skill:codebase-design`) — performance rules apply to the thin hook/JSX shells.
-- Route storage/client access through a single seam (e.g. `src/lib/storage.ts`)
-  so `client-localstorage-schema` stays satisfied.
-- Keep files small (a project line budget, e.g. ≤200 lines): extracting a
-  memoized child component is also the line-budget move.
-- Adapt this section per project in `AGENTS.md`; the rules above are framework-agnostic.
+- Prefer pure logic in framework-neutral modules behind deep seams; keep hooks/components focused on React coordination and rendering.
+- Route browser storage or external clients through an existing project seam; do not invent a `src/lib/storage.ts` convention when the repository uses another architecture.
+- Follow the repository's file-size/component conventions. Extract components for a clear ownership or render boundary, not an arbitrary package default.
+- Record framework/version, frontend roots, storage/data seams, and any line budget in the project's `AGENTS.md`.

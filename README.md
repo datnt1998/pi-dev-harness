@@ -1,68 +1,115 @@
 # pi-dev-harness
 
-A reusable [Pi](https://pi.dev) coding harness — the project-agnostic skills and
-slash-command prompts extracted from a real product harness so any project can
-inherit disciplined engineering workflow.
+Reusable Pi engineering harness: portable workflow skills/prompts plus safe autonomous ticket execution. Current compatibility baseline: Node 22+ and Pi `@earendil-works/pi-coding-agent` 0.80.6; Pi-hosted SDK peers follow Pi package guidance and are verified by the installed smoke.
 
-## What's inside
+## Included
 
-### Skills (`/skill:<name>`)
-- **pi-harness** — design, audit, extend, evolve Pi harnesses
-- **engineering-workflow** — grill → spec → tickets → implement → review → handoff
-- **codebase-design** — deep modules, seams, adapters
-- **domain-modeling** — CONTEXT.md + ADR discipline
-- **git-rules** — Conventional Commits, small reversible changes, checkpoints
-- **release-versioning** — SemVer, release gate, professional notes
-- **ticket-readiness** / **batch-implementation** — gate + autonomously run ticket batches
-- **prototype** — throwaway prototypes to answer design questions
-- **wayfinder** — chart oversized/foggy efforts as investigation maps
-- **memory-management** — safe use of persistent memory tools
-- **react-best-practices** — perf + architecture for React/Vite SPAs
-- **react-doctor** — deterministic CLI scan of `src/` (state/effect, perf, arch, security, a11y) + triage
-- **make-interfaces-feel-better** — design-engineering UI polish
+### Extensions
 
-### Prompts (`/name`)
-Harness: `build/audit/extend-pi-harness`, `harness-review`, `harness-team-review`,
-`harness-evolve`, `harness-engineering-setup`.
-Workflow: `grill-with-docs`, `to-spec`, `to-tickets`, `implement`, `code-review`,
-`diagnose`, `handoff`, `session-review`, `prepare-tickets`, `implement-all`,
-`commit-ready`, `release`, `ui-polish`, `fe-polish`, `react-doctor`, `wayfinder`,
-`memory-audit`, `tui-polish`.
+- `safe-ops` — blocks model writes to `.env`, `.git/**`, `node_modules/**`; confirms destructive model shell commands in TUI and blocks them headlessly. Guardrail, not sandbox.
+- `ticket-runner` — `/implement-all`, `/implementation-status [--verbose]`, `/implement-all-stop`; tools `batch_next`, `batch_report`; persisted state, source fingerprint, retries, continuation cap.
+
+### Skills (15)
+
+`pi-harness`, `engineering-workflow`, `codebase-design`, `domain-modeling`, `git-rules`, `release-versioning`, `release-check`, `ticket-readiness`, `batch-implementation`, `prototype`, `wayfinder`, `memory-management`, `react-best-practices`, `react-doctor`, `make-interfaces-feel-better`.
+
+### Prompts (26)
+
+Harness: `build-pi-harness`, `audit-pi-harness`, `extend-pi-harness`, `harness-review`, `harness-team-review`, `harness-evolve`, `harness-engineering-setup`.
+
+Workflow: `grill-with-docs`, `to-spec`, `to-tickets`, `implement`, `implement-batch`, `code-review`, `diagnose`, `handoff`, `session-review`, `prepare-tickets`, `commit-ready`, `release`, `release-check`, `wayfinder`, `memory-audit`.
+
+Frontend/TUI: `ui-polish`, `fe-polish`, `react-doctor`, `tui-polish`.
+
+### Project overlays
+
+Pi packages cannot auto-install `AGENTS.md` or `.pi/APPEND_SYSTEM.md`. Copy/adapt once:
+
+- `templates/PROJECT_SETUP.md`
+- `templates/APPEND_SYSTEM.md`
+- `templates/AGENTS.snippet.md`
+
+Keep product identity, test/build commands, release source, deploy trigger, themes, and product TUI in the consumer repository.
 
 ## Install
 
-Add to `~/.pi/agent/npm/package.json` dependencies and install:
+```bash
+# User-scope local development: all projects use this checkout.
+pi install /absolute/path/to/pi-dev-harness
 
-```jsonc
-// during development, from a local checkout:
-"pi-dev-harness": "file:../../Projects/exp/pi-dev-harness"
-// or once published:
-"pi-dev-harness": "^0.1.0"
+# Published, exact version (reproducible):
+pi install npm:pi-dev-harness@0.2.0
+
+# Team/project scope after publishing:
+pi install -l npm:pi-dev-harness@0.2.0
 ```
 
-Pi discovers the package's `skills/` and `prompts/` via the `"pi"` field in
-`package.json`. Reload Pi (`/reload`) and the skills/prompts appear.
+Then `/reload`.
 
-## Prerequisites & optional extensions
+Local-path installs follow the checkout immediately after `/reload`; pin that checkout to a known commit/tag for reproducible use. Exact npm specs are pinned. Upgrade/rollback explicitly with `pi install npm:pi-dev-harness@<version>` (add `-l` for project scope); inspect source/diff and rerun smoke before changing versions.
 
-This package ships **skills and prompts only** — no extensions. Most resources
-work standalone, but a few lean on capabilities a project must provide:
+## Set up a new project
+
+1. Run `/harness-engineering-setup`.
+2. Resolve `templates/PROJECT_SETUP.md`; copy verified project facts into `AGENTS.md` and adapt `templates/APPEND_SYSTEM.md` only when needed.
+3. Record repository/workspace roots, ecosystem-native validation commands, review base, `.scratch/` ignore policy, and release/deploy authority. Unknown production facts stay disabled—not guessed.
+4. `/reload`, then run `npm run smoke:installed` in this checkout.
+5. Exercise one small native change through inspect → validate → review → checkpoint before autonomous batches.
+
+Example discovery after reload: `/skill:engineering-workflow`, `/prepare-tickets`, `/implement-all <tickets>`, `/implementation-status`, and tools `batch_next`/`batch_report`.
+
+Generic names such as `/release` or `/code-review` can collide with another package/project copy. The SDK smoke reports diagnostics; remove copied duplicates or use Pi package filters before proceeding.
+
+## Cutover from copied resources
+
+1. Install package.
+2. Reload; verify skills, prompts, extension commands/tools, and zero diagnostics/conflicts.
+3. Preserve project-specific instructions in `AGENTS.md`/`.pi/APPEND_SYSTEM.md`.
+4. Move copied `.pi/skills` and `.pi/prompts` to a reversible backup; do not leave duplicate names loaded.
+5. Reload and rerun the smoke/tests.
+
+## Autonomous contract
+
+One approval envelope covers reversible work inside an approved spec/ticket/batch:
+
+`inspect → implement → validate → review → scoped fixes → checkpoint`
+
+The harness batches blocking questions and continues independent work. It always stops for unapproved scope/product/architecture/API/data decisions, destructive or irreversible work, credentials/security boundaries, migrations/data loss, production/push/publish/release/deploy, unsafe dirty state, unresolved blockers, or caps.
+
+`--commit` authorizes precise validated commits only.
+
+## Prerequisites and optional capabilities
 
 | Resource | Needs | If absent |
-| --- | --- | --- |
-| `memory-management`, `memory-audit` | a memory extension (`memory_manage`/`memory_search` tools, `/memories` command) | inert — skill/prompt say so and stop |
-| `batch-implementation`, `implement-all` | `ticket-runner` extension (`/implement-all` command) | **degrades gracefully** — the skill runs the batch loop manually |
-| subagent-assisted prompts (`harness-team-review`, `code-review`…) | `pi-subagents` package | falls back to single-agent flow |
-| research in workflow prompts | `pi-web-access` package (`web_search`/`fetch_content`) | skip web steps |
-| `react-doctor` (skill + prompt) | the `react-doctor` npm CLI, run on demand via `npx` (no dep) + a React `src/` tree | inert on non-React projects; no install needed elsewhere |
+|---|---|---|
+| Subagent-assisted review | `pi-subagents` | structured self-review fallback |
+| Web research | `pi-web-access` | skip web-only steps |
+| `react-doctor` | `npx react-doctor` + React `src/` | inert outside React |
+| `memory-management`, `memory-audit` | memory tools/extension | report unavailable and stop |
 
-## Notes
+Memory implementation, auth providers, web access, product UI/theme, vision, and notifications intentionally remain separate packages/project resources.
 
-- Project identity, TUI/theme, and product-specific extensions stay in each
-  project's `AGENTS.md` and `.pi/` — this package ships only portable resources.
-- Adapt the "Project fit" section of `react-best-practices` per project.
-- Memory as a full capability (extension + lib + tests) is a candidate for its
-  own future `pi-memory` package, not this one.
+### Known-good companion stack
+
+The harness runs alone, but highest-effectiveness review/research on the currently validated stack uses:
+
+- `pi-subagents@0.34.0` — independent/forked review and delegation;
+- `pi-web-access@0.13.0` — source-backed web/library research;
+- `@hypabolic/pi-hypa@0.1.11` — optional context compression;
+- `@gotgenes/pi-anthropic-auth@1.0.0` — optional Anthropic auth compatibility only.
+
+Install only needed, reviewed packages with exact versions; provider/auth packages are environment-specific. These are companions, not bundled dependencies, so `pi-dev-harness` remains useful in isolation and uses documented fallbacks.
+
+## Validate
+
+```bash
+npm test
+npm run pack:check
+npm run smoke:installed
+npm run smoke:packed
+```
+
+The installed smoke loads Pi twice: package-only in a temporary unrelated project, then integrated with current user packages. The packed smoke additionally packs, installs, and loads the actual tarball to verify published-file closure. Both verify extensions, commands, tools, prompts, skills, diagnostics, and conflicts. Run a final smoke in the real consumer after overlay changes. Expected tests cover ticket readiness/state, continuation coordination, safe-ops policy, package integrity, and setup portability.
 
 ## License
 

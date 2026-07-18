@@ -7,4 +7,4 @@ Use `/skill:git-rules` for:
 
 $ARGUMENTS
 
-Inspect `git status --short` and relevant diffs. Summarize changed files, checks already run, validation gaps, and propose a Conventional Commit message. If the user explicitly asked to commit, stage only intended files and commit; otherwise ask for confirmation before committing.
+Inspect status and relevant diffs. Report one terse line: scope, checks/review, gaps/risks, proposed commit. If commit was explicitly authorized, stage exact intended paths and commit without asking again; otherwise ask once. Never infer push/release/deploy permission.

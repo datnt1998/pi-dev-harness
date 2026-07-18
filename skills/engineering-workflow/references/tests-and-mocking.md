@@ -64,6 +64,6 @@ Don't mock: your own classes/modules, internal collaborators, anything you contr
 1. **Dependency injection** — pass external dependencies in rather than creating them internally.
 2. **Prefer SDK-style interfaces over generic fetchers** — specific functions per external operation (`api.getUser(id)`, `api.createOrder(data)`) instead of one generic `api.fetch(endpoint, options)`. Each mock returns one specific shape; no conditional logic in test setup; easier to see which endpoints a test exercises.
 
-## In this repo
+## Harness modules
 
-Harness logic follows the pure-core pattern: logic in `.pi/lib/*.ts`, tests in `.pi/tests/*.test.ts` with `node:test` + `assert/strict`, run via `npm run test:harness`. The pure module's exported functions are the seam — extensions/UI shells stay thin and untested.
+For Pi harness logic, prefer a pure core in the package's `lib/` or the project's documented `.pi/lib/`, with tests in the corresponding repository-native test location. The pure module's exported functions are the seam; extensions/UI shells stay thin. Discover the actual test command from the project/package contract rather than assuming `npm run test:harness`.

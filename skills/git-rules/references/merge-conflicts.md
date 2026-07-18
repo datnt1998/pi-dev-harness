@@ -8,6 +8,6 @@ Use when a git merge/rebase is in progress with conflicts. Adapted for Pi from m
 
 3. **Resolve each hunk.** Preserve both intents where possible. Where incompatible, pick the one matching the merge's stated goal and note the trade-off. Do **not** invent new behaviour. Always resolve; never `--abort` (aborting requires explicit user confirmation — it discards the merge in progress).
 
-4. Discover the project's **automated checks** and run them — typically typecheck, then tests, then format (here: `npm run test:harness` for `.pi/` changes, plus the app's own checks for `src/`). Fix anything the merge broke.
+4. Discover the project's **automated checks** from its overlay, CI, and build manifests; run the smallest affected checks, then any repository-required merge gate. Do not assume npm, `.pi/`, or a `src/` layout. Fix anything the merge broke.
 
 5. **Finish the merge/rebase.** Stage everything and commit (a merge commit concluding a conflicted merge is part of the in-progress operation — completing it is expected; still follow Conventional Commit style for the message when the tool allows). If rebasing, continue until all commits are rebased.

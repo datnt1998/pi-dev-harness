@@ -63,6 +63,8 @@ Goal:
 
 Scope:
 
+Working directory: (recommended for monorepos)
+
 Blocking edges:
 
 Implementation notes:
@@ -77,12 +79,13 @@ Tracer-bullet rules:
 - Each ticket should produce an end-to-end observable slice.
 - Prefer small vertical slices over horizontal layers.
 - Each ticket should be independently reviewable.
+- In monorepos, name the workspace/working directory and use its focused validation; add root-wide checks only when repository policy requires them.
 - Make dependencies explicit.
 - Avoid mega tickets like "build backend".
 
 ## Issue Tracker
 
-If `docs/agents/issue-tracker.md` exists, follow it. Otherwise use local markdown under `.scratch/`.
+If `docs/agents/issue-tracker.md` exists, follow it. Otherwise use local markdown under `.scratch/`. During setup, add `.scratch/` to the project ignore policy unless the team intentionally versions workflow artifacts.
 
 ## Handoff
 

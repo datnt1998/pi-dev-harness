@@ -15,7 +15,7 @@ Inspect the live harness, do not trust prior claims:
 - Duplication or unclear tiering across skills and prompts.
 - Stale commands, dead references, naming that leaks project identity into reusable resources.
 - Extension lifecycle cleanup, tool/package conflicts, TUI critical-info visibility.
-- Test health: run `npm run test:harness` and report pass/fail counts.
+- Test health: discover and run the repository's harness/resource checks; use `npm run test:harness` only when that script exists. Report pass/fail counts.
 
 ## 2. Classify into evolution tracks
 
@@ -39,13 +39,13 @@ Create or update `.scratch/harness-evolution/backlog.md`:
 ## 4. Sequence and apply
 
 - Apply **Maintenance** (low-risk) items now; keep edits small and reversible.
-- For **Consolidation / Capability / Packaging**, present a sequenced plan and **get confirmation before large changes** (per `/skill:pi-harness` Phase 0).
+- For **Consolidation / Capability / Packaging**, present one sequenced approval batch with recommended defaults; get confirmation once before large changes, not per item (per `/skill:pi-harness` Phase 0).
 - Never delete a resource without grepping the repo for references and checking `docs/plans/` for intentional design.
 
 ## 5. Validate + checkpoint
 
 - `/reload` succeeds; new commands appear in autocomplete; no tool-name conflicts.
-- `npm run test:harness` stays green (report counts).
+- Repository-native harness/resource checks stay green (report commands and counts).
 - Prepare a commit-ready checkpoint per `/skill:git-rules` (`docs(harness):` / `refactor(harness):` / `feat(harness):`). Do not commit without confirmation unless the user already approved the batch.
 
-Report: findings by track, what was applied, what is deferred (with reasons), and the recommended next track.
+Report tersely: counts/findings by track, applied, deferred reasons, recommended next batch. Expand only blockers, decisions, risks, or failed validation.

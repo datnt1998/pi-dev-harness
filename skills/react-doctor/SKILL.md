@@ -1,6 +1,6 @@
 ---
 name: react-doctor
-description: "Deterministically scan the React frontend (src/) for state/effect, performance, architecture, security, and accessibility issues via the react-doctor CLI, then triage and fix by severity. Use after finishing a feature, before committing React changes, when the user runs /react-doctor, or asks to scan/triage/clean up React diagnostics or check for a health-score regression."
+description: "Deterministically scan a React frontend for state/effect, performance, architecture, security, and accessibility issues via the react-doctor CLI, then triage and fix by severity. Use after finishing a feature, before committing React changes, or when asked to scan/triage diagnostics or check health-score regression."
 ---
 
 # React Doctor
@@ -10,9 +10,7 @@ Deterministic React code scanner. Complements `/skill:react-best-practices`
 0-100 health score across state & effects, performance, architecture,
 security, and accessibility. Built on oxlint.
 
-Adapted for Pi from `millionco/react-doctor` by Aiden Bai (MIT). This project
-is a **Vite + React 19 SPA** — every React file lives under `src/`, so the
-scanner applies directly; there are no Next/RSC/React-Native concerns here.
+Adapted for Pi from `millionco/react-doctor` by Aiden Bai (MIT). Discover the repository's React root/framework first and ignore diagnostics that target an inapplicable runtime.
 
 The CLI is run on demand via `npx` (no dependency added to `package.json`).
 
@@ -33,7 +31,7 @@ npx react-doctor@latest --verbose --scope changed
 
 If the score regressed, fix the newly introduced issues before you prepare a
 commit-ready checkpoint. This slots into the engineering-workflow validate
-step alongside `npm run test` + `npm run build`.
+step alongside the affected frontend workspace's repository-native test and build commands.
 
 ## Full cleanup pass (whole codebase)
 
@@ -42,9 +40,7 @@ npx react-doctor@latest --verbose            # with score
 npx react-doctor@latest --verbose --no-telemetry   # private, severity counts only
 ```
 
-Fix by severity: errors first, then warnings. Keep edits small and reversible;
-respect the project's conventions (ADR-0017 flat/no-shadow, pastel chips never
-accent/CTA, Vietnamese UI copy, files under ~200 lines).
+Fix by severity: errors first, then warnings. Keep edits small and reversible; discover and respect the repository's visual, copy, accessibility, architecture, and file-size conventions.
 
 ## /react-doctor — full local triage workflow
 

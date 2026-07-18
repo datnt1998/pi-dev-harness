@@ -4,8 +4,7 @@ description: Full frontend polish pass — React best practices (perf/architectu
 
 Run a two-axis frontend polish pass on: $ARGUMENTS
 
-If no target given, ask which feature/files to polish (or infer from the most
-recently changed `src/` files via `git diff --name-only HEAD~5 -- src/`).
+If no target is given, infer it from the current diff and repository frontend conventions; ask only if multiple choices would materially change scope.
 
 ## Axis A — React quality (perf + architecture)
 
@@ -24,8 +23,7 @@ target actually touches. Hunt in priority order:
 Load `/skill:make-interfaces-feel-better` and apply its full checklist
 (concentric radii, optical alignment, icon-swap, stagger/exit animations,
 tabular-nums, press scale 0.96, hit areas, `initial={false}`, specific
-transition properties). Also enforce project visual rules (ADR-0017: flat,
-no shadows; Vietnamese UI copy).
+transition properties). Discover and enforce the repository's visual, copy, accessibility, and file-size conventions.
 
 ## Discipline
 
@@ -40,7 +38,7 @@ no shadows; Vietnamese UI copy).
 
 1. Findings + changes as Before/After tables grouped by principle/rule
    (cite `file:line`; include every change).
-2. Validation: `npm run test` and `npm run build` must stay green; note counts.
+2. Validation: discover and run the affected frontend/workspace's repository-native test and build checks; do not assume npm. Note commands and counts.
 3. Commit-ready checkpoint per `/skill:git-rules` — propose a Conventional
    Commit message (`polish(scope): ...` or `perf(scope): ...`), do not commit
    without confirmation.

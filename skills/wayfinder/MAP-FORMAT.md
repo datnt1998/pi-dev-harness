@@ -31,7 +31,7 @@ A reviewed spec for multi-device sync, ready for /to-tickets.
 ## Notes
 
 - Domain vocabulary lives in CONTEXT.md; keep it updated via /skill:domain-modeling.
-- Prefer boring tech; the tracker is a personal tool, not a product.
+- Prefer boring tech; the map exists to resolve decisions, not create planning theater.
 
 ## Decisions so far
 

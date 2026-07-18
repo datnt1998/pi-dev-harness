@@ -45,7 +45,7 @@ When designing an interface, ask:
 2. **Return results, don't produce side effects.** `calculateDiscount(cart): Discount` beats mutating the cart in place.
 3. **Small surface area.** Fewer methods = fewer tests needed. Fewer params = simpler test setup.
 
-This project applies it as: pure logic in `.pi/lib/` or `src/lib/`, thin shells (extensions, UI) around it, tests against the pure interface (`npm run test:harness`).
+A common fit is pure logic behind a small interface, thin extension/UI adapters, and tests against that interface. Discover each repository's paths and test command instead of assuming them.
 
 ## Relationships
 
