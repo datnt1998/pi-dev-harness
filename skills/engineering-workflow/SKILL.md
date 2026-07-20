@@ -20,7 +20,7 @@ When the work involves changing Pi resources (`AGENTS.md`, `.pi/APPEND_SYSTEM.md
 5. **Commit-ready checkpoints** — after each successful implementation, use `/skill:git-rules` to inspect git state and propose a standards-compliant commit.
 6. **Handoff as a first-class artifact** — long work should end with a compact continuation note.
 7. **Approve once, execute fully** — approved reversible scope runs through implementation, validation, review, fixes, and checkpoint without intermediate confirmation. Read `references/autonomous-execution.md` when execution authority matters.
-8. **Every artifact has a lifecycle** — before creating any doc, classify it (plan=ephemeral, report=session-only, spec=living, ADR=immutable) and name who deletes it; a stale file is worse than a missing one. Read `references/artifact-lifecycle.md` when creating or triaging repo docs.
+8. **Every artifact has a lifecycle** — before creating any doc, classify it (plan=ephemeral, report=session-only, spec=living, ADR=immutable) and name who deletes it; a stale file is worse than a missing one. Read `references/artifact-lifecycle.md` for the taxonomy and use `/skill:repo-hygiene` for the active create-time gate and periodic drift sweep.
 
 ## Invocation Modes
 
@@ -50,6 +50,7 @@ When the user asks broadly, choose the first applicable phase:
 10. Designing or restructuring a module's interface/seam → `/skill:codebase-design`.
 11. Domain terms are fuzzy, overloaded, or a hard-to-reverse decision needs recording → `/skill:domain-modeling`.
 12. Effort too big for one session, path still foggy (greenfield, oversized feature) → `/skill:wayfinder` — plan as a map of investigation tickets first; it merges back into this flow at `to-spec`. A practical tell: grilling keeps surfacing questions that each need their own session (≥3 times).
+13. Creating a repo doc, or a long-running project has accumulated stale specs/plans/reports / drifted docs → `/skill:repo-hygiene` — classify on creation, and sweep/triage into keep/reconcile/delete under "the codebase is truth".
 
 ## Pi Harness Boundary
 
@@ -73,6 +74,7 @@ Vocabulary and detour skills that run underneath or beside the phases:
 - `/skill:prototype` — throwaway logic/UI prototypes when a question can't be settled in conversation; detour from `grill-with-docs`, bridged by `handoff`.
 - `/skill:wayfinder` — the planning layer above this flow for multi-session efforts: charts a map of grilling/prototype/research tickets under `.scratch/`, resolves one per session, then merges in at `to-spec`.
 - `/skill:git-rules` — commit checkpoints and merge-conflict resolution.
+- `/skill:repo-hygiene` — keeps non-code artifacts honest: create-time lifecycle gate plus a subagent-assisted drift sweep; runs at `handoff` and whenever docs accumulate.
 - `/skill:react-best-practices` — React perf/architecture rules (waterfalls, bundle, re-renders, composition) for `implement` and `code-review` on frontend code; pairs with `/skill:make-interfaces-feel-better` via the `/fe-polish` prompt.
 
 ## Pi Subagent Orchestration Contract

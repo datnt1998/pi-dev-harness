@@ -35,3 +35,8 @@ separates what the agent should read (authoritative) from what it should not
 - Prefer deleting a finished artifact over hoarding it.
 - Never resurrect a finished plan/report into an authoritative path.
 - When a living spec drifts from code, reconcile or delete in the same change.
+
+This file is the *taxonomy*. For the active create-time gate, the periodic
+drift sweep (inventory → classify → detect drift → keep/reconcile/delete), the
+approval/escalation rules, and the subagent team pattern, use
+`/skill:repo-hygiene` (or the `/tidy-docs` prompt).

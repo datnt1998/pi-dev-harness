@@ -75,6 +75,8 @@ When `pi-subagents` is available, launch async fresh-context, review-only review
 
 Reviewers inspect the actual diff and source files, cite file/line evidence, and do not edit project files. Keep their reports and severity judgments separate; do not collapse or rerank findings across axes.
 
+As part of the Spec axis, flag artifact-lifecycle drift: a living spec or context doc that no longer matches the changed code, a plan/report left in an authoritative path, or a decision that should have moved into an ADR (`/skill:repo-hygiene`). Treat a stale authoritative-looking doc as a real finding, not cosmetic.
+
 The parent then classifies findings as blockers, fixes worth doing now, optional/deferred improvements, or feedback to ignore. For implementation-authorized work, apply accepted fixes through one writer and re-run focused review when the fix is substantial. Stop for unapproved product, architecture, API, data, or scope decisions.
 
 If `pi-subagents` is unavailable or its budget is exhausted, run the same two axes sequentially as an explicit structured self-review. Record that isolation was unavailable; do not skip review or claim independent review.

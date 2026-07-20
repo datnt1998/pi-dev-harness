@@ -27,6 +27,18 @@ test("generic release flow does not impose npm or a project-specific releases mo
   assert.match(release, /exact deploy trigger/i);
 });
 
+test("repo-hygiene enforces lifecycle classification, drift sweep, and safe deletion", () => {
+  const skill = text("skills/repo-hygiene/SKILL.md");
+  const prompt = text("prompts/tidy-docs.md");
+  assert.match(skill, /single source of truth/i);
+  assert.match(skill, /create-time gate/i);
+  assert.match(skill, /keep\b.*reconcile.*delete|keep\s*\/\s*reconcile\s*\/\s*delete/i);
+  assert.match(skill, /not git-recoverable/i);
+  assert.match(skill, /fresh-context reviewers/i);
+  assert.match(prompt, /skill:repo-hygiene/);
+  assert.match(prompt, /keep .* reconcile .* delete/i);
+});
+
 test("autonomous review explicitly degrades when subagents are unavailable", () => {
   const runner = text("extensions/ticket-runner.ts");
   const skill = text("skills/batch-implementation/SKILL.md");
