@@ -20,6 +20,7 @@ When the work involves changing Pi resources (`AGENTS.md`, `.pi/APPEND_SYSTEM.md
 5. **Commit-ready checkpoints** — after each successful implementation, use `/skill:git-rules` to inspect git state and propose a standards-compliant commit.
 6. **Handoff as a first-class artifact** — long work should end with a compact continuation note.
 7. **Approve once, execute fully** — approved reversible scope runs through implementation, validation, review, fixes, and checkpoint without intermediate confirmation. Read `references/autonomous-execution.md` when execution authority matters.
+8. **Every artifact has a lifecycle** — before creating any doc, classify it (plan=ephemeral, report=session-only, spec=living, ADR=immutable) and name who deletes it; a stale file is worse than a missing one. Read `references/artifact-lifecycle.md` when creating or triaging repo docs.
 
 ## Invocation Modes
 
@@ -175,6 +176,7 @@ Load only when needed:
 - `references/autonomous-execution.md` — approval envelope, stop conditions, batched questions, terse reporting.
 - `references/completion-evidence.md` — acceptance-to-evidence completion contract.
 - `references/research.md` — source-backed research flow using `pi-web-access` and `researcher`.
+- `references/artifact-lifecycle.md` — lifecycle classes (plan/report/spec/ADR), physical separation of authoritative vs disposable files, and anti-drift rules.
 
 ## Done Criteria
 
