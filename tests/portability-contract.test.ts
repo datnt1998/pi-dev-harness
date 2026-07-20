@@ -52,16 +52,17 @@ test("repo-hygiene enforces lifecycle classification, drift sweep, and safe dele
   assert.match(prompt, /keep .* reconcile .* delete/i);
 });
 
-test("vendored tldraw-offline skill is genericized, attributed, and install-aware", () => {
-  const skill = text("skills/tldraw-offline/SKILL.md");
+test("tldraw-diagrams delegates to the third-party operator skill and installs if missing", () => {
+  const skill = text("skills/tldraw-diagrams/SKILL.md");
   const prompt = text("prompts/diagram.md");
-  // vendored third-party content must be attributed, not claimed as harness-owned
-  assert.match(skill, /vendored copy/i);
-  assert.match(skill, /all rights reserved/i);
+  // never vendor the proprietary skill/API
+  assert.match(skill, /delegat/i);
+  assert.match(skill, /skills\/tldraw-offline\/SKILL\.md/);
+  assert.match(skill, /all rights reserved|proprietary/i);
   // install-if-missing path is explicit and non-fabricated
   assert.match(skill, /offline\.tldraw\.com|tldraw-offline\/releases/);
   assert.match(skill, /do not fabricate/i);
-  assert.match(prompt, /skill:tldraw-offline/);
+  assert.match(prompt, /skill:tldraw-diagrams/);
 });
 
 test("no skill hardcodes a machine-specific home path", () => {

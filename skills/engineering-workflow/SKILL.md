@@ -51,7 +51,7 @@ When the user asks broadly, choose the first applicable phase:
 11. Domain terms are fuzzy, overloaded, or a hard-to-reverse decision needs recording → `/skill:domain-modeling`.
 12. Effort too big for one session, path still foggy (greenfield, oversized feature) → `/skill:wayfinder` — plan as a map of investigation tickets first; it merges back into this flow at `to-spec`. A practical tell: grilling keeps surfacing questions that each need their own session (≥3 times).
 13. Creating a repo doc, or a long-running project has accumulated stale specs/plans/reports / drifted docs → `/skill:repo-hygiene` — classify on creation, and sweep/triage into keep/reconcile/delete under "the codebase is truth".
-14. The user wants a design/architecture/workflow drawn on a canvas, or an ASCII sketch turned into a real diagram → `/skill:tldraw-offline` — operate the tldraw offline canvas (install the app first if missing).
+14. The user wants a design/architecture/workflow drawn on a canvas, or an ASCII sketch turned into a real diagram → `/skill:tldraw-diagrams` — installs tldraw offline if missing, then delegates to its operator skill.
 15. Refactoring or extending existing code that has weak/no tests (brownfield/legacy) → `implement` with `references/legacy-refactor.md` — characterize current behavior first, then change under a net.
 
 ## Pi Harness Boundary
@@ -77,7 +77,7 @@ Vocabulary and detour skills that run underneath or beside the phases:
 - `/skill:wayfinder` — the planning layer above this flow for multi-session efforts: charts a map of grilling/prototype/research tickets under `.scratch/`, resolves one per session, then merges in at `to-spec`.
 - `/skill:git-rules` — commit checkpoints and merge-conflict resolution.
 - `/skill:repo-hygiene` — keeps non-code artifacts honest: create-time lifecycle gate plus a subagent-assisted drift sweep; runs at `handoff` and whenever docs accumulate.
-- `/skill:tldraw-offline` — turns architecture/workflow discussion or an ASCII sketch into a real tldraw canvas (vendored third-party operator skill; install the app first if missing); useful during `to-spec` and `handoff`.
+- `/skill:tldraw-diagrams` — turns architecture/workflow discussion or an ASCII sketch into a real tldraw canvas (installs tldraw offline if missing); useful during `to-spec` and `handoff`.
 - `/skill:react-best-practices` — React perf/architecture rules (waterfalls, bundle, re-renders, composition) for `implement` and `code-review` on frontend code; pairs with `/skill:make-interfaces-feel-better` via the `/fe-polish` prompt.
 
 ## Pi Subagent Orchestration Contract
