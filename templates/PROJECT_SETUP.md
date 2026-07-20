@@ -2,6 +2,28 @@
 
 Copy the resolved facts into `AGENTS.md` (and `.pi/APPEND_SYSTEM.md` only for stable runtime behavior). Do not keep placeholders or guess unknown release/production details.
 
+## Adopting into an existing repository (brownfield)
+
+For a greenfield repo, fill the sections below directly. For an **existing
+repository**, discover before you write — the repo is the source of truth, not this
+template:
+
+- **Do not overwrite an existing `AGENTS.md`/`.pi/APPEND_SYSTEM.md`.** Merge these
+  facts into it and keep the project's own identity, rules, and history.
+- **Read before recording.** Derive each fact from evidence — test/build/CI config,
+  `CONTRIBUTING.md`, README, workspace/build manifests, existing branches, and
+  existing spec/ADR/docs — rather than imposing defaults. Use `scout` for a large
+  or unfamiliar codebase.
+- **Record only what you confirmed.** Leave a fact blank and flag it rather than
+  guessing an existing convention.
+- **Reconcile existing docs** with `/skill:repo-hygiene`: classify what is living vs
+  stale and fix or delete drift instead of stacking a second source of truth.
+- **Verify the current tree is green first.** Run the discovered checks on an
+  unchanged checkout before enabling autonomous work, so a later failure is
+  attributable to your change, not pre-existing state.
+- Refactoring existing untested code follows `references/legacy-refactor.md`
+  (characterize current behavior first).
+
 ## Repository
 
 - Project purpose/domain:

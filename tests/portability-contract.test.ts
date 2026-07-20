@@ -16,7 +16,20 @@ test("new-project setup covers ecosystem, monorepo, review, scratch, and release
     "Version source(s)",
     "Exact production/deploy trigger",
     "Rollback and smoke procedure",
+    "existing repository",
+    "Do not overwrite an existing",
   ]) assert.match(setup, new RegExp(required.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i"), required);
+});
+
+test("brownfield legacy-refactor guidance characterizes before changing untested code", () => {
+  const ref = text("skills/engineering-workflow/references/legacy-refactor.md");
+  const skill = text("skills/engineering-workflow/SKILL.md");
+  assert.match(ref, /characteriz/i);
+  assert.match(ref, /pin the current behavior first/i);
+  assert.match(ref, /refactor under green/i);
+  assert.match(ref, /change behavior\s+last/i);
+  // wired into the Implement phase and integration references
+  assert.match(skill, /legacy-refactor\.md/);
 });
 
 test("generic release flow does not impose npm or a project-specific releases module", () => {

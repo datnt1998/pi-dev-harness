@@ -18,7 +18,7 @@ A **seam** is the public boundary you test at: the interface where you observe b
 
 **Test only at approved seams.** Ticket acceptance criteria or an existing public interface are sufficient approval; do not ask again. Ask only when the seam itself requires an unapproved product/API/architecture decision.
 
-For what makes a test good or bad (implementation-coupled, tautological, horizontal slicing) and when to mock, read `tests-and-mocking.md` (same directory). For designing the module shape itself, use `/skill:codebase-design`.
+For what makes a test good or bad (implementation-coupled, tautological, horizontal slicing) and when to mock, read `tests-and-mocking.md` (same directory). For designing the module shape itself, use `/skill:codebase-design`. When the seam wraps untested/legacy code you are about to refactor, pin its current behavior first with `legacy-refactor.md` (same directory) before changing anything.
 
 ## Validation Contract
 

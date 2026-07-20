@@ -52,6 +52,7 @@ When the user asks broadly, choose the first applicable phase:
 12. Effort too big for one session, path still foggy (greenfield, oversized feature) → `/skill:wayfinder` — plan as a map of investigation tickets first; it merges back into this flow at `to-spec`. A practical tell: grilling keeps surfacing questions that each need their own session (≥3 times).
 13. Creating a repo doc, or a long-running project has accumulated stale specs/plans/reports / drifted docs → `/skill:repo-hygiene` — classify on creation, and sweep/triage into keep/reconcile/delete under "the codebase is truth".
 14. The user wants a design/architecture/workflow drawn on a canvas, or an ASCII sketch turned into a real diagram → `/skill:tldraw-offline` — operate the tldraw offline canvas (install the app first if missing).
+15. Refactoring or extending existing code that has weak/no tests (brownfield/legacy) → `implement` with `references/legacy-refactor.md` — characterize current behavior first, then change under a net.
 
 ## Pi Harness Boundary
 
@@ -133,11 +134,12 @@ Output artifacts:
 
 ### Implement
 
-Read `references/implementation-tdd.md`, `references/autonomous-execution.md`, and `references/completion-evidence.md`.
+Read `references/implementation-tdd.md`, `references/autonomous-execution.md`, and `references/completion-evidence.md`. When the target code has weak or no tests (brownfield/legacy), also read `references/legacy-refactor.md` and pin current behavior before changing it.
 
 Rules:
 - Do not implement a large ambiguous plan without approval.
 - Prefer small vertical slices.
+- Refactoring untested/legacy code: characterize current behavior first, refactor under green, change behavior last (`references/legacy-refactor.md`).
 - Run focused checks often; full suite at the end when feasible.
 - After implementation, run `code-review` before final summary.
 - After review, use `/skill:git-rules` to prepare a commit-ready checkpoint and propose a Conventional Commit message.
@@ -179,6 +181,7 @@ Load only when needed:
 - `references/pi-harness-integration.md` — boundary and handoff between engineering workflow and Pi harness work.
 - `references/autonomous-execution.md` — approval envelope, stop conditions, batched questions, terse reporting.
 - `references/completion-evidence.md` — acceptance-to-evidence completion contract.
+- `references/legacy-refactor.md` — brownfield safety: characterization/golden tests to pin current behavior before refactoring untested code.
 - `references/research.md` — source-backed research flow using `pi-web-access` and `researcher`.
 - `references/artifact-lifecycle.md` — lifecycle classes (plan/report/spec/ADR), physical separation of authoritative vs disposable files, and anti-drift rules.
 
