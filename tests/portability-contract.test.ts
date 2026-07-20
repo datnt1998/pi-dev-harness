@@ -39,6 +39,19 @@ test("repo-hygiene enforces lifecycle classification, drift sweep, and safe dele
   assert.match(prompt, /keep .* reconcile .* delete/i);
 });
 
+test("tldraw-diagrams delegates to the third-party operator skill and installs if missing", () => {
+  const skill = text("skills/tldraw-diagrams/SKILL.md");
+  const prompt = text("prompts/diagram.md");
+  // never vendor the proprietary skill/API
+  assert.match(skill, /delegat/i);
+  assert.match(skill, /skills\/tldraw-offline\/SKILL\.md/);
+  assert.match(skill, /all rights reserved|proprietary/i);
+  // install-if-missing path is explicit and non-fabricated
+  assert.match(skill, /offline\.tldraw\.com|tldraw-offline\/releases/);
+  assert.match(skill, /do not fabricate/i);
+  assert.match(prompt, /skill:tldraw-diagrams/);
+});
+
 test("autonomous review explicitly degrades when subagents are unavailable", () => {
   const runner = text("extensions/ticket-runner.ts");
   const skill = text("skills/batch-implementation/SKILL.md");

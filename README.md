@@ -9,17 +9,17 @@ Reusable Pi engineering harness: portable workflow skills/prompts plus safe auto
 - `safe-ops` — blocks model writes to `.env`, `.git/**`, `node_modules/**`; confirms destructive model shell commands in TUI and blocks them headlessly. Guardrail, not sandbox.
 - `ticket-runner` — `/implement-all`, `/implementation-status [--verbose]`, `/implement-all-stop`; tools `batch_next`, `batch_report`; persisted state, source fingerprint, retries, continuation cap.
 
-### Skills (16)
+### Skills (17)
 
-`pi-harness`, `engineering-workflow`, `codebase-design`, `domain-modeling`, `git-rules`, `repo-hygiene`, `release-versioning`, `release-check`, `ticket-readiness`, `batch-implementation`, `prototype`, `wayfinder`, `memory-management`, `react-best-practices`, `react-doctor`, `make-interfaces-feel-better`.
+`pi-harness`, `engineering-workflow`, `codebase-design`, `domain-modeling`, `git-rules`, `repo-hygiene`, `release-versioning`, `release-check`, `ticket-readiness`, `batch-implementation`, `prototype`, `wayfinder`, `memory-management`, `react-best-practices`, `react-doctor`, `make-interfaces-feel-better`, `tldraw-diagrams`.
 
-### Prompts (27)
+### Prompts (28)
 
 Harness: `build-pi-harness`, `audit-pi-harness`, `extend-pi-harness`, `harness-review`, `harness-team-review`, `harness-evolve`, `harness-engineering-setup`.
 
 Workflow: `grill-with-docs`, `to-spec`, `to-tickets`, `implement`, `implement-batch`, `code-review`, `diagnose`, `handoff`, `session-review`, `prepare-tickets`, `commit-ready`, `tidy-docs`, `release`, `release-check`, `wayfinder`, `memory-audit`.
 
-Frontend/TUI: `ui-polish`, `fe-polish`, `react-doctor`, `tui-polish`.
+Frontend/TUI: `ui-polish`, `fe-polish`, `react-doctor`, `tui-polish`, `diagram`.
 
 ### Project overlays
 
@@ -86,8 +86,9 @@ The harness batches blocking questions and continues independent work. It always
 | Web research | `pi-web-access` | skip web-only steps |
 | `react-doctor` | `npx react-doctor` + React `src/` | inert outside React |
 | `memory-management`, `memory-audit` | memory tools/extension | report unavailable and stop |
+| `tldraw-diagrams`, `diagram` | tldraw offline app + its `~/skills/tldraw-offline` operator skill | prompt to install tldraw offline, else fall back to an ASCII sketch |
 
-Memory implementation, auth providers, web access, product UI/theme, vision, and notifications intentionally remain separate packages/project resources.
+Memory implementation, auth providers, web access, product UI/theme, vision, notifications, and the third-party tldraw offline app/skill intentionally remain separate packages/project resources.
 
 ### Known-good companion stack
 
