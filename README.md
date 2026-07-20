@@ -11,7 +11,7 @@ Reusable Pi engineering harness: portable workflow skills/prompts plus safe auto
 
 ### Skills (17)
 
-`pi-harness`, `engineering-workflow`, `codebase-design`, `domain-modeling`, `git-rules`, `repo-hygiene`, `release-versioning`, `release-check`, `ticket-readiness`, `batch-implementation`, `prototype`, `wayfinder`, `memory-management`, `react-best-practices`, `react-doctor`, `make-interfaces-feel-better`, `tldraw-diagrams`.
+`pi-harness`, `engineering-workflow`, `codebase-design`, `domain-modeling`, `git-rules`, `repo-hygiene`, `release-versioning`, `release-check`, `ticket-readiness`, `batch-implementation`, `prototype`, `wayfinder`, `memory-management`, `react-best-practices`, `react-doctor`, `make-interfaces-feel-better`, `tldraw-offline`.
 
 ### Prompts (28)
 
@@ -86,7 +86,7 @@ The harness batches blocking questions and continues independent work. It always
 | Web research | `pi-web-access` | skip web-only steps |
 | `react-doctor` | `npx react-doctor` + React `src/` | inert outside React |
 | `memory-management`, `memory-audit` | memory tools/extension | report unavailable and stop |
-| `tldraw-diagrams`, `diagram` | tldraw offline app + its `~/skills/tldraw-offline` operator skill | prompt to install tldraw offline, else fall back to an ASCII sketch |
+| `tldraw-offline` (vendored), `diagram` | tldraw offline desktop app running | prompt to install tldraw offline, else fall back to an ASCII sketch |
 
 Memory implementation, auth providers, web access, product UI/theme, vision, notifications, and the third-party tldraw offline app/skill intentionally remain separate packages/project resources.
 

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { readFileSync } from "node:fs";
+import { readFileSync, readdirSync } from "node:fs";
 import { resolve } from "node:path";
 
 const root = resolve(import.meta.dirname, "..");
@@ -39,17 +39,32 @@ test("repo-hygiene enforces lifecycle classification, drift sweep, and safe dele
   assert.match(prompt, /keep .* reconcile .* delete/i);
 });
 
-test("tldraw-diagrams delegates to the third-party operator skill and installs if missing", () => {
-  const skill = text("skills/tldraw-diagrams/SKILL.md");
+test("vendored tldraw-offline skill is genericized, attributed, and install-aware", () => {
+  const skill = text("skills/tldraw-offline/SKILL.md");
   const prompt = text("prompts/diagram.md");
-  // never vendor the proprietary skill/API
-  assert.match(skill, /delegat/i);
-  assert.match(skill, /skills\/tldraw-offline\/SKILL\.md/);
-  assert.match(skill, /all rights reserved|proprietary/i);
+  // vendored third-party content must be attributed, not claimed as harness-owned
+  assert.match(skill, /vendored copy/i);
+  assert.match(skill, /all rights reserved/i);
   // install-if-missing path is explicit and non-fabricated
   assert.match(skill, /offline\.tldraw\.com|tldraw-offline\/releases/);
   assert.match(skill, /do not fabricate/i);
-  assert.match(prompt, /skill:tldraw-diagrams/);
+  assert.match(prompt, /skill:tldraw-offline/);
+});
+
+test("no skill hardcodes a machine-specific home path", () => {
+  const stack = [resolve(root, "skills")];
+  const offenders: string[] = [];
+  while (stack.length) {
+    const dir = stack.pop()!;
+    for (const name of readdirSync(dir, { withFileTypes: true })) {
+      const full = resolve(dir, name.name);
+      if (name.isDirectory()) stack.push(full);
+      else if (/\.(md|ts|sh)$/.test(name.name) || name.name === "tq") {
+        if (/\/Users\/[a-z0-9._-]+\//i.test(readFileSync(full, "utf8"))) offenders.push(full);
+      }
+    }
+  }
+  assert.deepEqual(offenders, []);
 });
 
 test("autonomous review explicitly degrades when subagents are unavailable", () => {
