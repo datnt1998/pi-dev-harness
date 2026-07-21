@@ -13,6 +13,27 @@ import { parseClaudeUsage, parseCodexUsage, type UsageState } from "./provider-u
 
 export const USAGE_PROVIDERS = new Set(["anthropic", "openai-codex"]);
 
+/** HTTP error carrying the status and a parsed Retry-After (ms) for backoff. */
+export class UsageError extends Error {
+  status?: number;
+  retryAfterMs?: number;
+  constructor(message: string, status?: number, retryAfterMs?: number) {
+    super(message);
+    this.name = "UsageError";
+    this.status = status;
+    this.retryAfterMs = retryAfterMs;
+  }
+}
+
+/** Parse a Retry-After header (delta-seconds or HTTP-date) into ms, if present. */
+export function parseRetryAfter(value: string | null, now = Date.now()): number | undefined {
+  if (!value) return undefined;
+  const secs = Number(value.trim());
+  if (Number.isFinite(secs)) return Math.max(0, secs * 1000);
+  const when = Date.parse(value);
+  return Number.isNaN(when) ? undefined : Math.max(0, when - now);
+}
+
 function readProviderAuth(provider: string): Record<string, unknown> {
   const dir = process.env.PI_CODING_AGENT_DIR || join(homedir(), ".pi", "agent");
   const auth = JSON.parse(readFileSync(join(dir, "auth.json"), "utf8"));
@@ -27,7 +48,9 @@ async function fetchJson(url: string, headers: Record<string, string>, signal: A
   if (signal.aborted) controller.abort();
   try {
     const response = await fetch(url, { method: "GET", headers, signal: controller.signal });
-    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    if (!response.ok) {
+      throw new UsageError(`HTTP ${response.status}`, response.status, parseRetryAfter(response.headers.get("retry-after")));
+    }
     return await response.json();
   } finally {
     clearTimeout(timer);

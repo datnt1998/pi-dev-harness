@@ -69,6 +69,14 @@ test("renderBar fills proportionally", () => {
   assert.equal(renderBar(50, 10), "[█████░░░░░]");
 });
 
+test("parseRetryAfter accepts delta-seconds, HTTP-date, and rejects junk", async () => {
+  const { parseRetryAfter } = await import("../lib/provider-usage-fetch.ts");
+  assert.equal(parseRetryAfter("120"), 120_000);
+  assert.equal(parseRetryAfter(null), undefined);
+  assert.equal(parseRetryAfter("not-a-date"), undefined);
+  assert.equal(parseRetryAfter(new Date(5_000).toUTCString(), 0), 5_000);
+});
+
 test("usageRole maps remaining percent to theme roles", () => {
   assert.equal(usageRole(80), "success");
   assert.equal(usageRole(40), "muted");

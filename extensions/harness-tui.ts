@@ -23,7 +23,7 @@ import { basename, join } from "node:path";
 import { homedir } from "node:os";
 import { contextSeverity, formatContextLabel, formatSessionCost, getFooterLayout, shortenPath } from "../lib/tui-core.ts";
 import { formatUsageThemed, type UsageState } from "../lib/provider-usage-core.ts";
-import { USAGE_PROVIDERS, fetchUsage } from "../lib/provider-usage-fetch.ts";
+import { USAGE_PROVIDERS, UsageError, fetchUsage } from "../lib/provider-usage-fetch.ts";
 
 type Settings = { enabled: boolean; label?: string; showUsage: boolean };
 const DEFAULTS: Settings = { enabled: true, showUsage: true };
@@ -79,6 +79,7 @@ export default function harnessTui(pi: ExtensionAPI) {
   let controller: AbortController | undefined;
   let generation = 0;
   let timer: ReturnType<typeof setInterval> | undefined;
+  let cooldownUntil = 0;
 
   const sev = { ok: "dim", warn: "warning", critical: "error" } as const;
 
@@ -90,6 +91,7 @@ export default function harnessTui(pi: ExtensionAPI) {
   async function refreshUsage(ctx: ExtensionContext): Promise<void> {
     const p = usageProvider(ctx);
     if (!state.settings.enabled || !state.settings.showUsage || !p) return;
+    if (Date.now() < cooldownUntil) return; // backing off after a rate-limit
     controller?.abort();
     controller = new AbortController();
     const mine = ++generation;
@@ -97,9 +99,16 @@ export default function harnessTui(pi: ExtensionAPI) {
     footerTui?.requestRender();
     try {
       const usage = await fetchUsage(p, controller.signal);
-      if (mine === generation) state.usage = usage;
+      if (mine === generation) { state.usage = usage; cooldownUntil = 0; }
     } catch (error) {
-      if (mine === generation) state.usage = { provider: p, windows: [], updatedAt: Date.now(), error: (error as Error).message };
+      if (mine !== generation) return;
+      const e = error as UsageError;
+      if (e.status === 429) cooldownUntil = Date.now() + (e.retryAfterMs ?? 5 * 60_000);
+      // Keep last-good bars if we have them; only surface an error line when empty.
+      if (!state.usage || state.usage.windows.length === 0) {
+        const msg = e.status === 429 ? "rate-limited" : e.status ? `n/a (${e.status})` : "n/a";
+        state.usage = { provider: p, windows: [], updatedAt: Date.now(), error: msg };
+      }
     } finally {
       if (mine === generation) {
         state.usageLoading = false;

@@ -14,7 +14,7 @@ import type { ExtensionAPI, ExtensionCommandContext, ExtensionContext } from "@e
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { formatUsageThemed, type UsageState } from "../lib/provider-usage-core.ts";
-import { USAGE_PROVIDERS, fetchUsage } from "../lib/provider-usage-fetch.ts";
+import { USAGE_PROVIDERS, UsageError, fetchUsage } from "../lib/provider-usage-fetch.ts";
 
 const KEY = "provider-usage";
 const REFRESH_MS = 60_000;
@@ -34,6 +34,7 @@ export default function providerUsage(pi: ExtensionAPI) {
   let controller: AbortController | undefined;
   let generation = 0;
   let timer: ReturnType<typeof setInterval> | undefined;
+  let cooldownUntil = 0;
 
   const provider = (ctx: ExtensionContext) => {
     const p = ctx.model?.provider;
@@ -55,6 +56,7 @@ export default function providerUsage(pi: ExtensionAPI) {
   async function refresh(ctx: ExtensionContext): Promise<void> {
     const p = provider(ctx);
     if (!state.enabled || !p) return;
+    if (Date.now() < cooldownUntil) return; // backing off after a rate-limit
     controller?.abort();
     controller = new AbortController();
     const mine = ++generation;
@@ -62,9 +64,15 @@ export default function providerUsage(pi: ExtensionAPI) {
     render(ctx);
     try {
       const usage = await fetchUsage(p, controller.signal);
-      if (mine === generation) state.usage = usage;
+      if (mine === generation) { state.usage = usage; cooldownUntil = 0; }
     } catch (error) {
-      if (mine === generation) state.usage = { provider: p, windows: [], updatedAt: Date.now(), error: (error as Error).message };
+      if (mine !== generation) return;
+      const e = error as UsageError;
+      if (e.status === 429) cooldownUntil = Date.now() + (e.retryAfterMs ?? 5 * 60_000);
+      if (!state.usage || state.usage.windows.length === 0) {
+        const msg = e.status === 429 ? "rate-limited" : e.status ? `n/a (${e.status})` : "n/a";
+        state.usage = { provider: p, windows: [], updatedAt: Date.now(), error: msg };
+      }
     } finally {
       if (mine === generation) {
         state.loading = false;
