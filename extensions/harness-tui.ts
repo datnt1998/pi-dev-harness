@@ -28,7 +28,10 @@ import { USAGE_PROVIDERS, UsageError, fetchUsage } from "../lib/provider-usage-f
 type Settings = { enabled: boolean; label?: string; showUsage: boolean };
 const DEFAULTS: Settings = { enabled: true, showUsage: true };
 const SEP = " │ ";
-const REFRESH_MS = 60_000;
+// Usage endpoints are themselves rate-limited and change slowly; poll gently and
+// collapse bursty session/model triggers so we never hammer them into a 429.
+const REFRESH_MS = 5 * 60_000;
+const MIN_FETCH_GAP_MS = 60_000;
 
 function configPath(cwd: string): string {
   return join(cwd, ".pi", "harness-tui.json");
@@ -80,6 +83,8 @@ export default function harnessTui(pi: ExtensionAPI) {
   let generation = 0;
   let timer: ReturnType<typeof setInterval> | undefined;
   let cooldownUntil = 0;
+  let lastFetchAt = 0;
+  let lastProvider: string | undefined;
 
   const sev = { ok: "dim", warn: "warning", critical: "error" } as const;
 
@@ -88,10 +93,12 @@ export default function harnessTui(pi: ExtensionAPI) {
     return p && USAGE_PROVIDERS.has(p) ? p : undefined;
   };
 
-  async function refreshUsage(ctx: ExtensionContext): Promise<void> {
+  async function refreshUsage(ctx: ExtensionContext, force = false): Promise<void> {
     const p = usageProvider(ctx);
     if (!state.settings.enabled || !state.settings.showUsage || !p) return;
     if (Date.now() < cooldownUntil) return; // backing off after a rate-limit
+    if (!force && Date.now() - lastFetchAt < MIN_FETCH_GAP_MS) return; // collapse bursty triggers
+    lastFetchAt = Date.now();
     controller?.abort();
     controller = new AbortController();
     const mine = ++generation;
@@ -194,13 +201,22 @@ export default function harnessTui(pi: ExtensionAPI) {
     state.running = false;
     await refreshBranch(ctx.cwd);
     render(ctx);
-    void refreshUsage(ctx);
+    lastProvider = usageProvider(ctx);
+    void refreshUsage(ctx, true);
     timer = setInterval(() => { if (lastCtx) void refreshUsage(lastCtx); }, REFRESH_MS);
   });
   pi.on("agent_start", (_event, ctx) => { state.running = true; render(ctx); });
   pi.on("agent_settled", (_event, ctx) => { state.running = false; render(ctx); });
   pi.on("thinking_level_select", (event, ctx) => { state.thinking = event.level; render(ctx); });
-  pi.on("model_select", (_event, ctx) => { state.thinking = pi.getThinkingLevel(); state.usage = undefined; render(ctx); void refreshUsage(ctx); });
+  pi.on("model_select", (_event, ctx) => {
+    state.thinking = pi.getThinkingLevel();
+    const p = usageProvider(ctx);
+    const changed = p !== lastProvider;
+    lastProvider = p;
+    if (changed) state.usage = undefined; // provider switched: fetch fresh, bypass throttle
+    render(ctx);
+    if (changed) void refreshUsage(ctx, true);
+  });
   pi.on("session_shutdown", (_event, ctx) => {
     generation += 1;
     controller?.abort();
@@ -228,14 +244,14 @@ export default function harnessTui(pi: ExtensionAPI) {
       if (cmd === "on" || cmd === "off") {
         state.settings.enabled = cmd === "on";
         persist();
-        if (lastCtx) { render(lastCtx); if (cmd === "on") void refreshUsage(lastCtx); }
+        if (lastCtx) { render(lastCtx); if (cmd === "on") void refreshUsage(lastCtx, true); }
         ctx.ui.notify(`harness-tui ${cmd}`, "info");
         return;
       }
       if (cmd === "usage-on" || cmd === "usage-off") {
         state.settings.showUsage = cmd === "usage-on";
         persist();
-        if (lastCtx) { render(lastCtx); if (cmd === "usage-on") void refreshUsage(lastCtx); }
+        if (lastCtx) { render(lastCtx); if (cmd === "usage-on") void refreshUsage(lastCtx, true); }
         ctx.ui.notify(`harness-tui usage ${cmd === "usage-on" ? "on" : "off"}`, "info");
         return;
       }

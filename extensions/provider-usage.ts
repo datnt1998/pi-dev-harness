@@ -17,7 +17,10 @@ import { formatUsageThemed, type UsageState } from "../lib/provider-usage-core.t
 import { USAGE_PROVIDERS, UsageError, fetchUsage } from "../lib/provider-usage-fetch.ts";
 
 const KEY = "provider-usage";
-const REFRESH_MS = 60_000;
+// Usage endpoints are rate-limited and change slowly: poll gently and collapse
+// bursty session/model triggers so we never hammer them into a 429.
+const REFRESH_MS = 5 * 60_000;
+const MIN_FETCH_GAP_MS = 60_000;
 
 function loadEnabled(cwd: string): boolean {
   try {
@@ -35,6 +38,8 @@ export default function providerUsage(pi: ExtensionAPI) {
   let generation = 0;
   let timer: ReturnType<typeof setInterval> | undefined;
   let cooldownUntil = 0;
+  let lastFetchAt = 0;
+  let lastProvider: string | undefined;
 
   const provider = (ctx: ExtensionContext) => {
     const p = ctx.model?.provider;
@@ -53,10 +58,12 @@ export default function providerUsage(pi: ExtensionAPI) {
     ctx.ui.setWidget(KEY, [line], { placement: "belowEditor" });
   }
 
-  async function refresh(ctx: ExtensionContext): Promise<void> {
+  async function refresh(ctx: ExtensionContext, force = false): Promise<void> {
     const p = provider(ctx);
     if (!state.enabled || !p) return;
     if (Date.now() < cooldownUntil) return; // backing off after a rate-limit
+    if (!force && Date.now() - lastFetchAt < MIN_FETCH_GAP_MS) return; // collapse bursty triggers
+    lastFetchAt = Date.now();
     controller?.abort();
     controller = new AbortController();
     const mine = ++generation;
@@ -88,10 +95,18 @@ export default function providerUsage(pi: ExtensionAPI) {
 
   pi.on("session_start", (_event, ctx) => {
     state.enabled = loadEnabled(ctx.cwd);
+    lastProvider = provider(ctx);
     render(ctx);
-    if (state.enabled) { void refresh(ctx); startTimer(); }
+    if (state.enabled) { void refresh(ctx, true); startTimer(); }
   });
-  pi.on("model_select", (_event, ctx) => { state.usage = undefined; render(ctx); if (state.enabled) void refresh(ctx); });
+  pi.on("model_select", (_event, ctx) => {
+    const p = provider(ctx);
+    const changed = p !== lastProvider;
+    lastProvider = p;
+    if (changed) state.usage = undefined;
+    render(ctx);
+    if (state.enabled && changed) void refresh(ctx, true);
+  });
   pi.on("session_shutdown", (_event, ctx) => {
     generation += 1;
     controller?.abort();
@@ -110,12 +125,12 @@ export default function providerUsage(pi: ExtensionAPI) {
       const cmd = args.trim().toLowerCase();
       if (cmd === "on" || cmd === "off") {
         state.enabled = cmd === "on";
-        if (lastCtx) { render(lastCtx); if (state.enabled) { void refresh(lastCtx); startTimer(); } }
+        if (lastCtx) { render(lastCtx); if (state.enabled) { void refresh(lastCtx, true); startTimer(); } }
         ctx.ui.notify(`provider-quota ${cmd}`, "info");
         return;
       }
       if (cmd === "refresh") {
-        if (lastCtx) void refresh(lastCtx);
+        if (lastCtx) void refresh(lastCtx, true);
         ctx.ui.notify("provider-quota: refreshing…", "info");
         return;
       }
