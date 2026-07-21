@@ -29,6 +29,7 @@ Pi packages cannot auto-install `AGENTS.md` or `.pi/APPEND_SYSTEM.md`. Copy/adap
 - `templates/PROJECT_SETUP.md`
 - `templates/APPEND_SYSTEM.md`
 - `templates/AGENTS.snippet.md`
+- `templates/theme.example.json` — optional neutral starter theme (name `harness-neutral`). Copy to `.pi/themes/`, rename/rebrand, and select it in Pi. It defines the semantic roles `harness-tui` uses (`accent/dim/muted/success/warning/error`) plus the standard markdown/syntax/tool roles. Not applied automatically; product-branded themes stay in the consumer repo.
 
 Keep product identity, test/build commands, release source, deploy trigger, themes, and product TUI in the consumer repository.
 

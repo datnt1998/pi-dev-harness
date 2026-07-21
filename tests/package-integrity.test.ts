@@ -30,10 +30,20 @@ test("package exposes the expected portable resource surface", () => {
     "templates/APPEND_SYSTEM.md",
     "templates/AGENTS.snippet.md",
     "templates/PROJECT_SETUP.md",
+    "templates/theme.example.json",
     "scripts/sdk-smoke.mjs",
     "scripts/packed-smoke.mjs",
     "LICENSE",
   ]) assert.equal(existsSync(join(root, path)), true, path);
+});
+
+test("neutral theme template defines the semantic roles harness-tui depends on", () => {
+  const theme = JSON.parse(readFileSync(join(root, "templates/theme.example.json"), "utf8"));
+  for (const role of ["accent", "dim", "muted", "success", "warning", "error"]) {
+    assert.ok(theme.colors?.[role], `theme missing semantic role: ${role}`);
+  }
+  // neutral, not branded after a consumer project
+  assert.doesNotMatch(theme.name ?? "", /tracker|personal|orbit|pomodoro/i);
 });
 
 test("skill frontmatter names are valid and unique", () => {
