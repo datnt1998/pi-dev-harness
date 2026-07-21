@@ -4,11 +4,14 @@ import {
   clampPercent,
   formatDurationCompact,
   formatUsageLine,
+  formatUsageThemed,
   parseClaudeUsage,
   parseCodexUsage,
   providerLabel,
   renderBar,
+  renderBarThemed,
   resolveSecondaryWindowLabel,
+  usageRole,
   usageSeverity,
 } from "../lib/provider-usage-core.ts";
 
@@ -64,6 +67,27 @@ test("renderBar fills proportionally", () => {
   assert.equal(renderBar(100, 10), "[██████████]");
   assert.equal(renderBar(0, 10), "[░░░░░░░░░░]");
   assert.equal(renderBar(50, 10), "[█████░░░░░]");
+});
+
+test("usageRole maps remaining percent to theme roles", () => {
+  assert.equal(usageRole(80), "success");
+  assert.equal(usageRole(40), "muted");
+  assert.equal(usageRole(20), "warning");
+  assert.equal(usageRole(5), "error");
+});
+
+test("themed formatters route text through the injected fg and stay content-stable", () => {
+  const fg = (role: string, text: string) => `<${role}>${text}`;
+  assert.equal(renderBarThemed(fg, 100, 4), "<dim>[<success>████<dim><dim>]");
+  const state = { provider: "anthropic", windows: [{ label: "5h", usedPercent: 24, resetAt: 60_000 }], updatedAt: 0 };
+  const line = formatUsageThemed(fg, state, { barWidth: 4, showReset: true, now: 0 });
+  assert.match(line, /<accent>Claude/);
+  assert.match(line, /<dim>5h/);
+  assert.match(line, /76% left/);
+  assert.match(line, /reset 1m/);
+  // identity fg reproduces the plain content without styling markers
+  const plainish = formatUsageThemed((_r, t) => t, state, { barWidth: 4, showReset: true, now: 0 });
+  assert.match(plainish, /^Claude {2}5h \[.+\] 76% left · reset 1m$/);
 });
 
 test("formatUsageLine renders plain, theme-free quota line", () => {

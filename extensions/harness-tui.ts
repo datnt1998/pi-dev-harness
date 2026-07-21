@@ -1,35 +1,34 @@
 /**
  * harness-tui — a brandless, responsive Pi footer that preserves critical
  * visibility (context %, session cost, cwd/path, git branch, thinking level,
- * model) at every terminal width.
+ * model) at every terminal width, plus a colored provider-quota second line
+ * (Claude 5h/Week, Codex) so a fresh project looks cohesive out of the box.
  *
  * Portable and identity-free: the label defaults to the project folder name and
- * is configurable; there is no product branding, theme, or project-specific
- * status contract here. Pure layout/format logic lives in `../lib/tui-core.ts`.
+ * is configurable; no product branding or theme. Colors come from the active
+ * theme's semantic roles. Pure layout/format logic in `../lib/tui-core.ts` and
+ * `../lib/provider-usage-core.ts`.
  *
- * ONE FOOTER OWNER: setting a footer replaces Pi's built-in one. A project that
- * ships its own footer extension must disable this via `.pi/harness-tui.json`
- * (`{ "enabled": false }`) or `/harness-tui off`, so the two never fight.
+ * ONE FOOTER OWNER: setting a footer replaces Pi's built-in one. A project with
+ * its own footer disables this via `.pi/harness-tui.json` (`{ "enabled": false }`)
+ * or `/harness-tui off`. The quota line can be turned off with `"showUsage": false`.
  *
  * Config (layered, project wins): `<cwd>/.pi/harness-tui.json`
- *   { "enabled": true, "label": "optional label; defaults to folder name" }
+ *   { "enabled": true, "label": "optional; defaults to folder name", "showUsage": true }
  */
 import type { ExtensionAPI, ExtensionCommandContext, ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { truncateToWidth, visibleWidth } from "@earendil-works/pi-tui";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { basename, join } from "node:path";
 import { homedir } from "node:os";
-import {
-  contextSeverity,
-  formatContextLabel,
-  formatSessionCost,
-  getFooterLayout,
-  shortenPath,
-} from "../lib/tui-core.ts";
+import { contextSeverity, formatContextLabel, formatSessionCost, getFooterLayout, shortenPath } from "../lib/tui-core.ts";
+import { formatUsageThemed, type UsageState } from "../lib/provider-usage-core.ts";
+import { USAGE_PROVIDERS, fetchUsage } from "../lib/provider-usage-fetch.ts";
 
-type Settings = { enabled: boolean; label?: string };
-const DEFAULTS: Settings = { enabled: true };
+type Settings = { enabled: boolean; label?: string; showUsage: boolean };
+const DEFAULTS: Settings = { enabled: true, showUsage: true };
 const SEP = " │ ";
+const REFRESH_MS = 60_000;
 
 function configPath(cwd: string): string {
   return join(cwd, ".pi", "harness-tui.json");
@@ -40,6 +39,7 @@ function loadSettings(cwd: string): Settings {
     const raw = JSON.parse(readFileSync(configPath(cwd), "utf8")) as Partial<Settings>;
     return {
       enabled: typeof raw.enabled === "boolean" ? raw.enabled : DEFAULTS.enabled,
+      showUsage: typeof raw.showUsage === "boolean" ? raw.showUsage : DEFAULTS.showUsage,
       label: typeof raw.label === "string" && raw.label.trim() ? raw.label.trim() : undefined,
     };
   } catch {
@@ -71,10 +71,42 @@ export default function harnessTui(pi: ExtensionAPI) {
     running: false,
     thinking: "off",
     branch: undefined as string | undefined,
+    usage: undefined as UsageState | undefined,
+    usageLoading: false,
   };
   let lastCtx: ExtensionContext | undefined;
+  let footerTui: { requestRender(): void } | undefined;
+  let controller: AbortController | undefined;
+  let generation = 0;
+  let timer: ReturnType<typeof setInterval> | undefined;
 
   const sev = { ok: "dim", warn: "warning", critical: "error" } as const;
+
+  const usageProvider = (ctx: ExtensionContext) => {
+    const p = ctx.model?.provider;
+    return p && USAGE_PROVIDERS.has(p) ? p : undefined;
+  };
+
+  async function refreshUsage(ctx: ExtensionContext): Promise<void> {
+    const p = usageProvider(ctx);
+    if (!state.settings.enabled || !state.settings.showUsage || !p) return;
+    controller?.abort();
+    controller = new AbortController();
+    const mine = ++generation;
+    state.usageLoading = true;
+    footerTui?.requestRender();
+    try {
+      const usage = await fetchUsage(p, controller.signal);
+      if (mine === generation) state.usage = usage;
+    } catch (error) {
+      if (mine === generation) state.usage = { provider: p, windows: [], updatedAt: Date.now(), error: (error as Error).message };
+    } finally {
+      if (mine === generation) {
+        state.usageLoading = false;
+        footerTui?.requestRender();
+      }
+    }
+  }
 
   async function refreshBranch(cwd: string): Promise<void> {
     const result = await pi.exec("git", ["branch", "--show-current"], { cwd }).catch(() => undefined);
@@ -90,46 +122,58 @@ export default function harnessTui(pi: ExtensionAPI) {
       return;
     }
     const label = state.settings.label ?? basename(ctx.cwd) ?? ctx.cwd;
+    const showUsage = state.settings.showUsage;
+    const hasProvider = !!usageProvider(ctx);
 
     ctx.ui.setFooter((tui, theme, footerData) => {
+      footerTui = tui;
       const unsubscribe = footerData.onBranchChange(() => tui.requestRender());
+      const fg = (r: string, t: string) => theme.fg(r as never, t);
       return {
         dispose: unsubscribe,
         invalidate() {},
         render(width: number): string[] {
           const usage = ctx.getContextUsage();
           const percent = usage?.percent ?? null;
-          const ctxText = `ctx ${formatContextLabel(usage?.tokens ?? null, usage?.contextWindow ?? null, percent)}`;
-          const ctxStyled = theme.fg(sev[contextSeverity(percent)], ctxText);
-          const cost = theme.fg("muted", formatSessionCost(sessionCost(ctx)));
-          const mode = theme.fg(state.running ? "warning" : "success", state.running ? "working" : "ready");
-          const branch = theme.fg("muted", state.branch ?? footerData.getGitBranch() ?? "no-git");
-          const thinking = theme.fg("muted", state.thinking);
-          const modelFull = theme.fg("muted", ctx.model ? `${ctx.model.provider}/${ctx.model.id}` : "no-model");
-          const modelShort = theme.fg("muted", ctx.model?.id ?? "no-model");
-          const name = theme.fg("accent", label);
-          const dim = (s: string) => theme.fg("dim", s);
-          const path = theme.fg("muted", shortenPath(ctx.cwd, homedir(), 3));
+          const ctxStyled = fg(sev[contextSeverity(percent)], `ctx ${formatContextLabel(usage?.tokens ?? null, usage?.contextWindow ?? null, percent)}`);
+          const cost = fg("muted", formatSessionCost(sessionCost(ctx)));
+          const mode = fg(state.running ? "warning" : "success", state.running ? "working" : "ready");
+          const branch = fg("muted", state.branch ?? footerData.getGitBranch() ?? "no-git");
+          const thinking = fg("muted", state.thinking);
+          const modelFull = fg("muted", ctx.model ? `${ctx.model.provider}/${ctx.model.id}` : "no-model");
+          const modelShort = fg("muted", ctx.model?.id ?? "no-model");
+          const name = fg("accent", label);
+          const dim = (s: string) => fg("dim", s);
+          const path = fg("muted", shortenPath(ctx.cwd, homedir(), 3));
           const layout = getFooterLayout(width);
 
+          // Second line: colored provider quota (only where there is room).
+          const usageLine =
+            showUsage && hasProvider && width >= 100
+              ? state.usageLoading && !state.usage
+                ? dim("Usage loading…")
+                : formatUsageThemed(fg, state.usage, { barWidth: width >= 140 ? 10 : 8 })
+              : undefined;
+
+          let main: string;
           if (layout === "wide") {
-            const left = [name, dim(SEP), mode, dim(SEP), theme.fg("muted", ctx.cwd), dim(SEP), branch].join("");
+            const left = [name, dim(SEP), mode, dim(SEP), fg("muted", ctx.cwd), dim(SEP), branch].join("");
             const right = [ctxStyled, dim(SEP), cost, dim(SEP), thinking, dim(SEP), modelFull].join("");
-            return [compose(left, right, width)];
-          }
-          if (layout === "standard") {
+            main = compose(left, right, width);
+          } else if (layout === "standard") {
             const left = [name, dim(SEP), mode, dim(SEP), path, dim(SEP), branch].join("");
             const right = [ctxStyled, dim(SEP), cost, dim(SEP), thinking, dim(SEP), modelShort].join("");
-            return [compose(left, right, width)];
-          }
-          if (layout === "compact") {
+            main = compose(left, right, width);
+          } else if (layout === "compact") {
             const top = [name, dim(SEP), mode, dim(SEP), path].join("");
             const bottom = [ctxStyled, dim(SEP), cost, dim(SEP), thinking, dim(SEP), modelShort].join("");
             return [truncateToWidth(top, width), truncateToWidth(bottom, width)];
+          } else {
+            const top = [name, dim(SEP), fg("muted", shortenPath(ctx.cwd, homedir(), 1))].join("");
+            const bottom = [ctxStyled, dim(SEP), thinking, dim(SEP), modelShort].join("");
+            return [truncateToWidth(top, width), truncateToWidth(bottom, width)];
           }
-          const top = [name, dim(SEP), theme.fg("muted", shortenPath(ctx.cwd, homedir(), 1))].join("");
-          const bottom = [ctxStyled, dim(SEP), thinking, dim(SEP), modelShort].join("");
-          return [truncateToWidth(top, width), truncateToWidth(bottom, width)];
+          return usageLine ? [main, truncateToWidth(usageLine, width)] : [main];
         },
       };
     });
@@ -141,35 +185,52 @@ export default function harnessTui(pi: ExtensionAPI) {
     state.running = false;
     await refreshBranch(ctx.cwd);
     render(ctx);
+    void refreshUsage(ctx);
+    timer = setInterval(() => { if (lastCtx) void refreshUsage(lastCtx); }, REFRESH_MS);
   });
   pi.on("agent_start", (_event, ctx) => { state.running = true; render(ctx); });
   pi.on("agent_settled", (_event, ctx) => { state.running = false; render(ctx); });
   pi.on("thinking_level_select", (event, ctx) => { state.thinking = event.level; render(ctx); });
-  pi.on("model_select", (_event, ctx) => { state.thinking = pi.getThinkingLevel(); render(ctx); });
-  pi.on("session_shutdown", (_event, ctx) => { if (ctx.mode === "tui") ctx.ui.setFooter(undefined); });
+  pi.on("model_select", (_event, ctx) => { state.thinking = pi.getThinkingLevel(); state.usage = undefined; render(ctx); void refreshUsage(ctx); });
+  pi.on("session_shutdown", (_event, ctx) => {
+    generation += 1;
+    controller?.abort();
+    if (timer) clearInterval(timer);
+    timer = undefined;
+    if (ctx.mode === "tui") ctx.ui.setFooter(undefined);
+  });
 
   pi.registerCommand("harness-tui", {
-    description: "Harness footer: status | on | off",
+    description: "Harness footer: status | on | off | usage-on | usage-off",
     getArgumentCompletions: (prefix) => {
-      const items = ["status", "on", "off"].filter((n) => n.startsWith(prefix.toLowerCase())).map((n) => ({ value: n, label: n }));
+      const items = ["status", "on", "off", "usage-on", "usage-off"].filter((n) => n.startsWith(prefix.toLowerCase())).map((n) => ({ value: n, label: n }));
       return items.length > 0 ? items : null;
     },
     handler: async (args: string, ctx: ExtensionCommandContext) => {
       const cmd = args.trim().toLowerCase();
+      const persist = () => {
+        if (!existsSync(join(ctx.cwd, ".pi"))) return;
+        try {
+          writeFileSync(configPath(ctx.cwd), `${JSON.stringify(state.settings, null, 2)}\n`, "utf8");
+        } catch (error) {
+          ctx.ui.notify(`harness-tui: could not persist (${(error as Error).message})`, "warning");
+        }
+      };
       if (cmd === "on" || cmd === "off") {
         state.settings.enabled = cmd === "on";
-        if (existsSync(join(ctx.cwd, ".pi"))) {
-          try {
-            writeFileSync(configPath(ctx.cwd), `${JSON.stringify(state.settings, null, 2)}\n`, "utf8");
-          } catch (error) {
-            ctx.ui.notify(`harness-tui: could not persist (${(error as Error).message})`, "warning");
-          }
-        }
-        if (lastCtx) render(lastCtx);
+        persist();
+        if (lastCtx) { render(lastCtx); if (cmd === "on") void refreshUsage(lastCtx); }
         ctx.ui.notify(`harness-tui ${cmd}`, "info");
         return;
       }
-      ctx.ui.notify(`harness-tui: ${state.settings.enabled ? "enabled" : "disabled"} · label "${state.settings.label ?? basename(ctx.cwd)}"`, "info");
+      if (cmd === "usage-on" || cmd === "usage-off") {
+        state.settings.showUsage = cmd === "usage-on";
+        persist();
+        if (lastCtx) { render(lastCtx); if (cmd === "usage-on") void refreshUsage(lastCtx); }
+        ctx.ui.notify(`harness-tui usage ${cmd === "usage-on" ? "on" : "off"}`, "info");
+        return;
+      }
+      ctx.ui.notify(`harness-tui: ${state.settings.enabled ? "enabled" : "disabled"} · usage ${state.settings.showUsage ? "on" : "off"} · label "${state.settings.label ?? basename(ctx.cwd)}"`, "info");
     },
   });
 }

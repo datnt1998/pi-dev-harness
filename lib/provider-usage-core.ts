@@ -65,6 +65,48 @@ export function usageSeverity(leftPercent: number): "ok" | "low" | "critical" {
   return "ok";
 }
 
+/** Theme role for a remaining percent, matching the shared status palette. */
+export function usageRole(leftPercent: number): "error" | "warning" | "success" | "muted" {
+  if (leftPercent <= 10) return "error";
+  if (leftPercent <= 25) return "warning";
+  if (leftPercent >= 75) return "success";
+  return "muted";
+}
+
+type Fg = (role: string, text: string) => string;
+
+/** Colored progress bar built through an injected theme `fg`. Brackets/empty use `dim` for portability. */
+export function renderBarThemed(fg: Fg, leftPercent: number, width = 10): string {
+  const filled = Math.max(0, Math.min(width, Math.round((clampPercent(leftPercent) / 100) * width)));
+  return `${fg("dim", "[")}${fg(usageRole(clampPercent(leftPercent)), "\u2588".repeat(filled))}${fg("dim", "\u2591".repeat(width - filled))}${fg("dim", "]")}`;
+}
+
+/**
+ * Colored, cohesive one-line quota summary through an injected theme `fg`
+ * (role -> styled string). Shared by the footer's second line and the standalone
+ * widget so both look identical. Pure and testable (pass `fg = (_r, t) => t`).
+ */
+export function formatUsageThemed(
+  fg: Fg,
+  state: UsageState | undefined,
+  opts: { barWidth?: number; showReset?: boolean; now?: number } = {},
+): string {
+  if (!state) return fg("dim", "Usage quota n/a");
+  const label = providerLabel(state.provider);
+  if (state.error) return fg("warning", `${label} quota: ${state.error}`);
+  if (state.windows.length === 0) return fg("dim", `${label} quota n/a`);
+  const barWidth = opts.barWidth ?? 10;
+  const showReset = opts.showReset ?? true;
+  const now = opts.now ?? Date.now();
+  const parts = state.windows.map((w) => {
+    const left = Math.max(0, 100 - w.usedPercent);
+    const role = usageRole(left);
+    const reset = showReset && w.resetAt ? fg("dim", ` \u00b7 reset ${formatDurationCompact(w.resetAt - now)}`) : "";
+    return `${fg("dim", w.label)} ${renderBarThemed(fg, left, barWidth)} ${fg(role, `${left.toFixed(0)}% left`)}${reset}`;
+  });
+  return `${fg("accent", label)}  ${parts.join(fg("dim", " \u2502 "))}`;
+}
+
 export function providerLabel(provider?: string): string {
   if (provider === "openai-codex") return "Codex";
   if (provider === "anthropic") return "Claude";
