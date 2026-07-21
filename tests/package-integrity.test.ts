@@ -25,6 +25,8 @@ test("package exposes the expected portable resource surface", () => {
   for (const path of [
     "extensions/safe-ops.ts",
     "extensions/ticket-runner.ts",
+    "extensions/harness-tui.ts",
+    "lib/tui-core.ts",
     "templates/APPEND_SYSTEM.md",
     "templates/AGENTS.snippet.md",
     "templates/PROJECT_SETUP.md",

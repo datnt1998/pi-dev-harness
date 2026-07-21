@@ -8,6 +8,7 @@ Reusable Pi engineering harness: portable workflow skills/prompts plus safe auto
 
 - `safe-ops` — blocks model writes to `.env`, `.git/**`, `node_modules/**`; confirms destructive model shell commands in TUI and blocks them headlessly. Guardrail, not sandbox.
 - `ticket-runner` — `/implement-all`, `/implementation-status [--verbose]`, `/implement-all-stop`; tools `batch_next`, `batch_report`; persisted state, source fingerprint, retries, continuation cap.
+- `harness-tui` — brandless responsive footer preserving context %, session cost, cwd/path, git branch, thinking level, and model at every width; `/harness-tui status|on|off`. Identity-free (label defaults to the folder name, no theme/branding). **One footer owner:** a project shipping its own footer must set `.pi/harness-tui.json` `{ "enabled": false }` or run `/harness-tui off` so the two never fight. Pure layout/format logic in `lib/tui-core.ts`.
 
 ### Skills (17)
 
