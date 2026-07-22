@@ -43,6 +43,7 @@ import {
   evaluateAutoCompact,
   formatCompactionReport,
   formatIndicatorLine,
+  formatIndicatorThemed,
   formatStatusText,
   normalizeAutoCompactSettings,
   parseAutoCompactCommand,
@@ -169,9 +170,11 @@ export default function autocompact(pi: ExtensionAPI) {
       ctx.ui.setWidget(UI_KEY, undefined);
       return;
     }
-    const line = formatIndicatorLine(tokens, contextWindow, state.settings);
-    ctx.ui.setStatus(UI_KEY, line);
-    ctx.ui.setWidget(UI_KEY, [line], { placement: "belowEditor" });
+    // Plain, compact string for the status area; colored bar for the widget so
+    // it reads as one system with the harness footer / provider-usage bars.
+    ctx.ui.setStatus(UI_KEY, formatIndicatorLine(tokens, contextWindow, state.settings));
+    const fg = (r: string, t: string) => ctx.ui.theme.fg(r as never, t);
+    ctx.ui.setWidget(UI_KEY, [formatIndicatorThemed(fg, tokens, contextWindow, state.settings)], { placement: "belowEditor" });
   }
 
   function runCompaction(ctx: ExtensionContext, options: { auto: boolean; instructions?: string }): void {

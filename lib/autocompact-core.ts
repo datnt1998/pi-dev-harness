@@ -280,6 +280,59 @@ export function formatIndicatorLine(tokens: number, contextWindow: number, setti
   return `Context ${used} · ${formatTokens(left)} tokens left until auto-compact${cap}`;
 }
 
+type Fg = (role: string, text: string) => string;
+
+/** Theme role for how close context is to the auto-compact trigger (shared palette). */
+export function indicatorRole(tokens: number, thresholds: ResolvedThresholds): "error" | "warning" | "success" | "muted" {
+  if (tokens >= thresholds.triggerTokens) return "error";
+  if (tokens >= thresholds.warnTokens) return "warning";
+  if (tokens < thresholds.showTokens) return "success";
+  return "muted";
+}
+
+/**
+ * Colored bar that FILLS as context grows toward the trigger (turns
+ * muted → warning → error). Same visual grammar as the provider-usage bar
+ * (dim brackets, █ fill, ░ empty) so the two widgets read as one system.
+ */
+export function renderCompactBarThemed(fg: Fg, tokens: number, thresholds: ResolvedThresholds, width = 10): string {
+  const frac = Math.max(0, Math.min(1, tokens / thresholds.triggerTokens));
+  const filled = Math.max(0, Math.min(width, Math.round(frac * width)));
+  const role = indicatorRole(tokens, thresholds);
+  return `${fg("dim", "[")}${fg(role, "\u2588".repeat(filled))}${fg("dim", "\u2591".repeat(width - filled))}${fg("dim", "]")}`;
+}
+
+/**
+ * Colored, cohesive one-line context indicator through an injected theme `fg`
+ * (role -> styled string). Mirrors the provider-usage widget: an `accent`
+ * label, a shared bar, and severity-colored text. Pure and testable
+ * (pass `fg = (_r, t) => t` for plain output).
+ */
+export function formatIndicatorThemed(
+  fg: Fg,
+  tokens: number,
+  contextWindow: number,
+  settings: AutoCompactSettings,
+  opts: { barWidth?: number } = {},
+): string {
+  const thresholds = resolveThresholds(contextWindow, settings);
+  const pct = floorPercent(tokens, contextWindow);
+  const label = fg("accent", "Ctx");
+  if (!thresholds) return `${label} ${fg("muted", `${formatTokens(tokens)} tokens`)}`;
+  const used = fg("muted", `${pct}% (${formatTokens(tokens)})`);
+  if (!settings.enabled) {
+    return `${label} ${used} ${fg("dim", "\u00b7 auto-compact OFF")}`;
+  }
+  const bar = renderCompactBarThemed(fg, tokens, thresholds, opts.barWidth ?? 10);
+  if (tokens >= thresholds.triggerTokens) {
+    return `${label} ${bar} ${fg("error", `${pct}% \u00b7 compact imminent`)}`;
+  }
+  const left = thresholds.triggerTokens - tokens;
+  const role = indicatorRole(tokens, thresholds);
+  const cap = thresholds.cappedByTokens ? fg("dim", " \u00b7 cap") : "";
+  return `${label} ${bar} ${fg(role, `${formatTokens(left)} left`)}${cap}`;
+}
+
 export type CompactionReason = "manual" | "threshold" | "overflow";
 
 /**

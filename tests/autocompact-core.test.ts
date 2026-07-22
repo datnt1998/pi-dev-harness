@@ -8,6 +8,9 @@ import {
   evaluateAutoCompact,
   formatCompactionReport,
   formatIndicatorLine,
+  formatIndicatorThemed,
+  indicatorRole,
+  renderCompactBarThemed,
   formatStatusText,
   formatTokens,
   normalizeAutoCompactSettings,
@@ -252,6 +255,27 @@ test("compaction report labels sources", () => {
     formatCompactionReport({ tokensBefore: 145_200, source: "manual", estimatedTokensAfter: 24_900 }),
     /manual.*145\.2k → ~24\.9k tokens/,
   );
+});
+
+test("themed indicator shares the provider-usage visual grammar and severity colors", () => {
+  const th = resolveThresholds(WINDOW_200K, DEFAULT_AUTOCOMPACT_SETTINGS)!; // trigger 180k, warn 150k, show 120k
+  assert.equal(indicatorRole(100_000, th), "success");
+  assert.equal(indicatorRole(130_000, th), "muted");
+  assert.equal(indicatorRole(160_000, th), "warning");
+  assert.equal(indicatorRole(185_000, th), "error");
+
+  const fg = (role: string, text: string) => `<${role}>${text}`;
+  // Full bar, error fill, dim brackets — same shape as renderBarThemed.
+  assert.equal(renderCompactBarThemed(fg, 180_000, th, 4), "<dim>[<error>\u2588\u2588\u2588\u2588<dim><dim>]");
+
+  const warn = formatIndicatorThemed(fg, 160_000, WINDOW_200K, DEFAULT_AUTOCOMPACT_SETTINGS, { barWidth: 4 });
+  assert.match(warn, /^<accent>Ctx /);
+  assert.match(warn, /<warning>20k left/);
+  const imminent = formatIndicatorThemed(fg, 190_000, WINDOW_200K, DEFAULT_AUTOCOMPACT_SETTINGS, { barWidth: 4 });
+  assert.match(imminent, /<error>95% \u00b7 compact imminent/);
+  // Identity fg yields clean plain text (no styling markers).
+  const plain = formatIndicatorThemed((_r, t) => t, 100_000, WINDOW_200K, DEFAULT_AUTOCOMPACT_SETTINGS, { barWidth: 4 });
+  assert.match(plain, /^Ctx \[.+\] 80k left$/);
 });
 
 test("command parsing covers all subcommands", () => {
