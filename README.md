@@ -42,10 +42,10 @@ Keep product identity, test/build commands, release source, deploy trigger, them
 pi install /absolute/path/to/pi-dev-harness
 
 # Published, exact version (reproducible):
-pi install npm:pi-dev-harness@0.4.0
+pi install npm:pi-dev-harness@0.4.1
 
 # Team/project scope after publishing:
-pi install -l npm:pi-dev-harness@0.4.0
+pi install -l npm:pi-dev-harness@0.4.1
 ```
 
 Then `/reload`.
