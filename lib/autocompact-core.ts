@@ -27,13 +27,26 @@ export type AutoCompactSettings = {
   warnPercent: number;
   /** Optional custom focus instructions passed to the compaction summary. */
   focus?: string;
+  /**
+   * Keep Pi's native between-turns auto-compaction (`compaction.reserveTokens`)
+   * aligned with our trigger, so a long single run compacts mid-run WITHOUT
+   * interrupting it (our own `ctx.compact()` aborts the run, so it can only run
+   * at idle). Default true. Applies from the next session/reload.
+   */
+  syncNativeReserve?: boolean;
 };
 
 export const DEFAULT_AUTOCOMPACT_SETTINGS: AutoCompactSettings = {
   enabled: true,
   triggerPercent: 90,
   warnPercent: 75,
+  syncNativeReserve: true,
 };
+
+/** Pi's default native compaction reserve; we never make native fire later than this. */
+export const NATIVE_RESERVE_DEFAULT = 16384;
+/** Always leave at least this much below the window so there is history to keep. */
+export const NATIVE_RESERVE_KEEP_FLOOR = 8000;
 
 export const TRIGGER_MIN = 50;
 export const TRIGGER_MAX = 95;
@@ -81,6 +94,7 @@ export function normalizeAutoCompactSettings(raw: unknown): AutoCompactSettings 
     enabled: source.enabled !== false,
     triggerPercent,
     warnPercent,
+    syncNativeReserve: source.syncNativeReserve !== false,
   };
   if (typeof source.triggerTokens === "number" && Number.isFinite(source.triggerTokens) && source.triggerTokens > 0) {
     settings.triggerTokens = clampInt(source.triggerTokens, TRIGGER_TOKENS_MIN, TRIGGER_TOKENS_MAX);
@@ -210,6 +224,26 @@ export function evaluateAutoCompact(params: {
   return { decision: { action: "none" }, nextTier: tier };
 }
 
+/**
+ * Desired value for Pi's native `compaction.reserveTokens` so its non-interrupting
+ * between-turns compaction fires at our effective trigger. Pi compacts mid-run
+ * when `tokens > contextWindow - reserveTokens`, so reserve = window - trigger.
+ * Returns undefined when unknown, disabled, or sync is off.
+ */
+export function computeNativeReserveTokens(
+  contextWindow: number | null,
+  settings: AutoCompactSettings,
+): number | undefined {
+  if (!settings.enabled || settings.syncNativeReserve === false) return undefined;
+  if (contextWindow === null || !Number.isFinite(contextWindow) || contextWindow <= 0) return undefined;
+  const thresholds = resolveThresholds(contextWindow, settings);
+  if (!thresholds) return undefined;
+  const desired = contextWindow - thresholds.triggerTokens;
+  const capped = Math.min(desired, contextWindow - NATIVE_RESERVE_KEEP_FLOOR);
+  // Never smaller than Pi's default (would make native fire LATER, not earlier).
+  return Math.max(NATIVE_RESERVE_DEFAULT, Math.round(capped));
+}
+
 /** Whether the persistent indicator should be visible at this usage level. */
 export function shouldShowIndicator(tokens: number | null, contextWindow: number | null, settings: AutoCompactSettings): boolean {
   if (tokens === null || contextWindow === null || !Number.isFinite(tokens)) return false;
@@ -286,11 +320,12 @@ export type AutoCompactCommand =
   | { kind: "triggerTokens"; tokens: number }
   | { kind: "warn"; percent: number }
   | { kind: "focus"; text?: string }
+  | { kind: "native"; on: boolean }
   | { kind: "now"; instructions?: string }
   | { kind: "help" }
   | { kind: "error"; message: string };
 
-export const AUTOCOMPACT_SUBCOMMANDS = ["status", "on", "off", "at", "warn", "focus", "now", "help"] as const;
+export const AUTOCOMPACT_SUBCOMMANDS = ["status", "on", "off", "at", "warn", "focus", "native", "now", "help"] as const;
 
 const AT_USAGE = `Usage: /autocompact at <${TRIGGER_MIN}-${TRIGGER_MAX}[%]> or <tokens, e.g. 200k | 250000 | 1m>`;
 
@@ -338,6 +373,12 @@ export function parseAutoCompactCommand(args: string): AutoCompactCommand {
         return { kind: "focus", text: undefined };
       }
       return { kind: "focus", text: rest };
+    case "native": {
+      const v = (restParts[0] ?? "").toLowerCase();
+      if (v === "on") return { kind: "native", on: true };
+      if (v === "off") return { kind: "native", on: false };
+      return { kind: "error", message: "Usage: /autocompact native on|off — align Pi's non-interrupting mid-run compaction" };
+    }
     case "now":
       return { kind: "now", instructions: rest.length > 0 ? rest : undefined };
     case "help":
@@ -420,6 +461,16 @@ export function applyAutoCompactCommand(settings: AutoCompactSettings, cmd: Auto
       }
       return { settings: { ...settings, focus: text }, changed: true, reply: `Compaction focus set: ${text}` };
     }
+    case "native": {
+      const on = cmd.on;
+      return {
+        settings: { ...settings, syncNativeReserve: on },
+        changed: (settings.syncNativeReserve !== false) !== on,
+        reply: on
+          ? "Mid-run sync ON — Pi's native compaction will align with your trigger (applies next session)"
+          : "Mid-run sync OFF — Pi's native compaction keeps its own reserve",
+      };
+    }
     default:
       return { settings, changed: false };
   }
@@ -455,6 +506,14 @@ export function formatStatusText(params: {
   } else {
     lines.push("Context: unknown (no usage data yet)");
   }
+  const reserve = computeNativeReserveTokens(contextWindow, settings);
+  if (reserve !== undefined && contextWindow !== null) {
+    lines.push(
+      `Mid-run (Pi native): compacts ~${formatTokens(contextWindow - reserve)} · reserve ${formatTokens(reserve)} · non-interrupting`,
+    );
+  } else if (settings.syncNativeReserve === false) {
+    lines.push("Mid-run (Pi native): sync OFF (long runs rely on Pi's default reserve)");
+  }
   lines.push(`Focus: ${settings.focus ?? "none"}`);
   return lines.join("\n");
 }
@@ -466,5 +525,6 @@ export const AUTOCOMPACT_HELP_TEXT = [
   "/autocompact at <tokens: 200k | 250000 | 1m> — absolute token trigger (percent stays as backstop)",
   `/autocompact warn <${WARN_MIN}-${WARN_MAX}> — set warning percent`,
   "/autocompact focus <text>|clear — set/clear summary focus instructions",
+  "/autocompact native on|off — align Pi's non-interrupting mid-run compaction with your trigger",
   "/autocompact now [instructions] — compact immediately",
 ].join("\n");

@@ -2,7 +2,9 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   applyAutoCompactCommand,
+  computeNativeReserveTokens,
   DEFAULT_AUTOCOMPACT_SETTINGS,
+  NATIVE_RESERVE_DEFAULT,
   evaluateAutoCompact,
   formatCompactionReport,
   formatIndicatorLine,
@@ -263,7 +265,37 @@ test("command parsing covers all subcommands", () => {
   assert.deepEqual(parseAutoCompactCommand("focus"), { kind: "focus", text: undefined });
   assert.deepEqual(parseAutoCompactCommand("now"), { kind: "now", instructions: undefined });
   assert.deepEqual(parseAutoCompactCommand("now focus on open bugs"), { kind: "now", instructions: "focus on open bugs" });
+  assert.deepEqual(parseAutoCompactCommand("native on"), { kind: "native", on: true });
+  assert.deepEqual(parseAutoCompactCommand("native off"), { kind: "native", on: false });
+  assert.equal(parseAutoCompactCommand("native").kind, "error");
   assert.equal(parseAutoCompactCommand("bogus").kind, "help");
+});
+
+test("native reserve aligns Pi's non-interrupting mid-run compaction with our trigger", () => {
+  // 200k window, 90% trigger → trigger 180k → native reserve = window - trigger = 20k.
+  assert.equal(computeNativeReserveTokens(WINDOW_200K, DEFAULT_AUTOCOMPACT_SETTINGS), 20_000);
+  // 1M window with a 300k token cap → trigger 300k → reserve 700k (native fires at 300k, not ~984k).
+  const capped = { ...DEFAULT_AUTOCOMPACT_SETTINGS, triggerTokens: 300_000 };
+  assert.equal(computeNativeReserveTokens(WINDOW_1M, capped), 700_000);
+  // Never below Pi's default (would make native fire later, not earlier).
+  const tight = { ...DEFAULT_AUTOCOMPACT_SETTINGS, triggerPercent: 95 };
+  assert.equal(computeNativeReserveTokens(WINDOW_200K, tight), NATIVE_RESERVE_DEFAULT);
+  // Off / unknown → undefined.
+  assert.equal(computeNativeReserveTokens(null, DEFAULT_AUTOCOMPACT_SETTINGS), undefined);
+  assert.equal(computeNativeReserveTokens(WINDOW_200K, { ...DEFAULT_AUTOCOMPACT_SETTINGS, syncNativeReserve: false }), undefined);
+  assert.equal(computeNativeReserveTokens(WINDOW_200K, { ...DEFAULT_AUTOCOMPACT_SETTINGS, enabled: false }), undefined);
+});
+
+test("native subcommand toggles mid-run sync and status shows the native window", () => {
+  assert.equal(DEFAULT_AUTOCOMPACT_SETTINGS.syncNativeReserve, true);
+  assert.equal(normalizeAutoCompactSettings({ syncNativeReserve: false }).syncNativeReserve, false);
+  const off = applyAutoCompactCommand(DEFAULT_AUTOCOMPACT_SETTINGS, { kind: "native", on: false });
+  assert.equal(off.settings.syncNativeReserve, false);
+  assert.equal(off.changed, true);
+  const status = formatStatusText({ settings: DEFAULT_AUTOCOMPACT_SETTINGS, tokens: 100_000, contextWindow: WINDOW_200K });
+  assert.match(status, /Mid-run \(Pi native\): compacts ~180k · reserve 20k · non-interrupting/);
+  const statusOff = formatStatusText({ settings: off.settings, tokens: 100_000, contextWindow: WINDOW_200K });
+  assert.match(statusOff, /Mid-run \(Pi native\): sync OFF/);
 });
 
 test("`at` accepts percent or token forms", () => {

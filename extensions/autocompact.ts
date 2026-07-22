@@ -38,6 +38,7 @@ import {
   applyAutoCompactCommand,
   type AutoCompactSettings,
   type CompactTier,
+  computeNativeReserveTokens,
   DEFAULT_AUTOCOMPACT_SETTINGS,
   evaluateAutoCompact,
   formatCompactionReport,
@@ -50,6 +51,10 @@ import {
 } from "../lib/autocompact-core.ts";
 
 const GLOBAL_SETTINGS_PATH = join(process.env.PI_CODING_AGENT_DIR || join(homedir(), ".pi", "agent"), "autocompact.json");
+/** Pi's own settings file (project scope) where `compaction.reserveTokens` lives. */
+function piProjectSettingsPath(cwd: string): string {
+  return join(cwd, ".pi", "settings.json");
+}
 const UI_KEY = "autocompact";
 /** Stop auto-attempts after this many consecutive failures (built-in safety net still applies). */
 const MAX_AUTO_FAILURES = 2;
@@ -61,6 +66,8 @@ type AutoCompactState = {
   /** True while a compaction triggered by our threshold (not /autocompact now) is in flight or just finished. */
   autoTriggered: boolean;
   autoFailures: number;
+  /** Last native reserveTokens value we wrote this session (dedup guard). */
+  nativeReserveWritten?: number;
 };
 
 function projectSettingsPath(cwd: string): string {
@@ -109,6 +116,46 @@ export default function autocompact(pi: ExtensionAPI) {
       await writeFile(target, `${JSON.stringify(state.settings, null, 2)}\n`, "utf8");
     } catch (error) {
       ctx.ui.notify(`autocompact: could not persist settings (${(error as Error).message})`, "warning");
+    }
+  }
+
+  /**
+   * Align Pi's native between-turns compaction with our trigger by writing
+   * `compaction.reserveTokens` into the PROJECT Pi settings (`.pi/settings.json`),
+   * so a long single run compacts mid-run without interrupting it. This is the
+   * only non-aborting mid-run mechanism (our own ctx.compact() aborts the run).
+   *
+   * Project-scoped only (never touches global settings, so a per-model reserve
+   * never leaks to other projects) and applies from the next session/reload,
+   * since Pi has no runtime setter for reserveTokens. Field-merge preserves any
+   * other keys; Pi never writes reserveTokens itself, so our value is not clobbered.
+   */
+  async function syncNativeReserve(ctx: ExtensionContext): Promise<void> {
+    if (state.settings.syncNativeReserve === false || !state.settings.enabled) return;
+    if (!(await directoryExists(join(ctx.cwd, ".pi")))) return; // no project scope to write to
+    const window = ctx.getContextUsage()?.contextWindow ?? ctx.model?.contextWindow ?? null;
+    const desired = computeNativeReserveTokens(window ?? null, state.settings);
+    if (desired === undefined) return;
+    if (state.nativeReserveWritten === desired) return; // already aligned this session
+
+    const path = piProjectSettingsPath(ctx.cwd);
+    const raw = (await readSettingsFile(path)) as Record<string, unknown> | undefined;
+    const current = (raw?.compaction as { reserveTokens?: unknown } | undefined)?.reserveTokens;
+    if (current === desired) {
+      state.nativeReserveWritten = desired;
+      return;
+    }
+    const next = { ...(raw ?? {}) } as Record<string, unknown>;
+    next.compaction = { ...((raw?.compaction as Record<string, unknown>) ?? {}), reserveTokens: desired };
+    try {
+      await writeFile(path, `${JSON.stringify(next, null, 2)}\n`, "utf8");
+      state.nativeReserveWritten = desired;
+      if (ctx.mode === "tui" && current !== undefined) {
+        // Only announce real changes to an existing value; first-time setup is silent.
+        ctx.ui.notify("autocompact: mid-run compaction re-aligned (applies next session)", "info");
+      }
+    } catch (error) {
+      ctx.ui.notify(`autocompact: could not align mid-run reserve (${(error as Error).message})`, "warning");
     }
   }
 
@@ -179,12 +226,16 @@ export default function autocompact(pi: ExtensionAPI) {
     state.compacting = false;
     state.autoTriggered = false;
     state.autoFailures = 0;
+    state.nativeReserveWritten = undefined;
     updateIndicator(ctx);
+    await syncNativeReserve(ctx);
   });
 
-  // Warnings + indicator refresh during a run (never compacts mid-run).
+  // Warnings + indicator refresh during a run (never compacts mid-run); also a
+  // reliable point to align Pi's native mid-run reserve (context window known).
   pi.on("turn_end", (_event, ctx) => {
     evaluate(ctx, false);
+    void syncNativeReserve(ctx);
   });
 
   // Safe boundary: no retry/compaction/continuation pending. Compact here.
@@ -192,11 +243,13 @@ export default function autocompact(pi: ExtensionAPI) {
     evaluate(ctx, ctx.isIdle() && !ctx.hasPendingMessages());
   });
 
-  pi.on("model_select", (_event, ctx) => {
+  pi.on("model_select", async (_event, ctx) => {
     // Context window (and thus thresholds) may have changed; give auto attempts a fresh chance.
     state.lastTier = "none";
     state.autoFailures = 0;
+    state.nativeReserveWritten = undefined; // window may differ → recompute
     updateIndicator(ctx);
+    await syncNativeReserve(ctx);
   });
 
   pi.on("session_compact", (event, ctx) => {
@@ -230,7 +283,7 @@ export default function autocompact(pi: ExtensionAPI) {
   });
 
   pi.registerCommand("autocompact", {
-    description: "Auto-compact: status | on | off | at <pct|tokens e.g. 200k> | warn <pct> | focus <text|clear> | now",
+    description: "Auto-compact: status | on | off | at <pct|tokens e.g. 200k> | warn <pct> | focus <text|clear> | native on|off | now",
     getArgumentCompletions: (prefix) => {
       const items = AUTOCOMPACT_SUBCOMMANDS.filter((name) => name.startsWith(prefix.toLowerCase())).map((name) => ({
         value: name,
@@ -248,7 +301,7 @@ export default function autocompact(pi: ExtensionAPI) {
             formatStatusText({
               settings: state.settings,
               tokens: usage?.tokens ?? null,
-              contextWindow: usage?.contextWindow ?? null,
+              contextWindow: usage?.contextWindow ?? ctx.model?.contextWindow ?? null,
             }),
             "info",
           );
@@ -274,7 +327,11 @@ export default function autocompact(pi: ExtensionAPI) {
           }
           state.settings = result.settings;
           state.lastTier = "none"; // re-arm warnings for the new thresholds
-          if (result.changed) await persistSettings(ctx);
+          if (result.changed) {
+            await persistSettings(ctx);
+            state.nativeReserveWritten = undefined; // trigger/tokens/native may have changed
+            await syncNativeReserve(ctx);
+          }
           if (result.reply) ctx.ui.notify(result.reply, "info");
           updateIndicator(ctx);
         }
