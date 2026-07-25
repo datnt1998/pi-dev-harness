@@ -47,7 +47,7 @@ When the user asks broadly, choose the first applicable phase:
 7. Session needs transfer/summary → `handoff`.
 8. The task is about Pi agent resources, packages, skills, prompts, extensions, themes, or harness architecture → use `/skill:pi-harness` first or alongside this workflow.
 9. Design question that needs a runnable answer (state model, UI variations) → `/skill:prototype`.
-10. Designing or restructuring a module's interface/seam → `/skill:codebase-design`.
+10. Designing or restructuring a module's interface/seam → `/skill:codebase-design`. Actively scanning an existing codebase for shallow modules / deepening opportunities → `/improve-architecture` (codebase-design `ARCHITECTURE-REVIEW.md`).
 11. Domain terms are fuzzy, overloaded, or a hard-to-reverse decision needs recording → `/skill:domain-modeling`.
 12. Effort too big for one session, path still foggy (greenfield, oversized feature) → `/skill:wayfinder` — plan as a map of investigation tickets first; it merges back into this flow at `to-spec`. A practical tell: grilling keeps surfacing questions that each need their own session (≥3 times).
 13. Creating a repo doc, or a long-running project has accumulated stale specs/plans/reports / drifted docs → `/skill:repo-hygiene` — classify on creation, and sweep/triage into keep/reconcile/delete under "the codebase is truth".

@@ -63,3 +63,4 @@ A common fit is pure logic behind a small interface, thin extension/UI adapters,
 
 - **Deepening a cluster given its dependencies** — read `DEEPENING.md` (same directory): dependency categories, seam discipline, replace-don't-layer testing.
 - **Exploring alternative interfaces** — read `DESIGN-IT-TWICE.md` (same directory): fan out parallel pi-subagents to design the interface several radically different ways, then compare on depth, locality, and seam placement.
+- **Actively scanning a codebase for deepening opportunities** — read `ARCHITECTURE-REVIEW.md` (same directory): YAGNI hot-spot scoping, the deletion test, a temp-dir report of candidates with strength badges, then a grilling loop. Reachable via `/improve-architecture`.

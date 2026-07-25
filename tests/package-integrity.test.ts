@@ -21,7 +21,7 @@ const extensionFiles = filesUnder(join(root, "extensions"), ".ts");
 
 test("package exposes the expected portable resource surface", () => {
   assert.equal(skillFiles.length, 17);
-  assert.equal(promptFiles.length, 28);
+  assert.equal(promptFiles.length, 29);
   for (const path of [
     "extensions/safe-ops.ts",
     "extensions/ticket-runner.ts",
