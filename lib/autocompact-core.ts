@@ -48,6 +48,46 @@ export const NATIVE_RESERVE_DEFAULT = 16384;
 /** Always leave at least this much below the window so there is history to keep. */
 export const NATIVE_RESERVE_KEEP_FLOOR = 8000;
 
+/**
+ * Stable marker substring from the Pi SDK's stale-ctx error (thrown by
+ * `ExtensionRunner.assertActive` after a session replacement or reload). Every
+ * `ExtensionContext` getter/method calls `assertActive`, so a ctx captured
+ * across an await throws this once the session is replaced/forked/reloaded.
+ * Matched narrowly so genuine errors are never mistaken for a stale context.
+ */
+export const STALE_CTX_MARKER = "This extension ctx is stale after session replacement or reload";
+
+/** True when `error` is the Pi SDK's stale-ctx/session-replacement error. */
+export function isStaleCtxError(error: unknown): boolean {
+  return error instanceof Error && error.message.includes(STALE_CTX_MARKER);
+}
+
+/**
+ * Run a synchronous ctx access; return `undefined` on a stale ctx (silent
+ * no-op) and re-throw anything else so genuine errors still surface.
+ */
+export function safeCtx<T>(access: () => T): T | undefined {
+  try {
+    return access();
+  } catch (error) {
+    if (isStaleCtxError(error)) return undefined;
+    throw error;
+  }
+}
+
+/**
+ * Await ctx work; resolve `undefined` when the ctx goes stale across an await
+ * (silent no-op) and reject anything else so genuine errors still surface.
+ */
+export async function safeCtxAsync<T>(work: () => Promise<T>): Promise<T | undefined> {
+  try {
+    return await work();
+  } catch (error) {
+    if (isStaleCtxError(error)) return undefined;
+    throw error;
+  }
+}
+
 export const TRIGGER_MIN = 50;
 export const TRIGGER_MAX = 95;
 export const WARN_MIN = 30;

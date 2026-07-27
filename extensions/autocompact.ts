@@ -45,9 +45,12 @@ import {
   formatIndicatorLine,
   formatIndicatorThemed,
   formatStatusText,
+  isStaleCtxError,
   normalizeAutoCompactSettings,
   parseAutoCompactCommand,
   resolveCompactionSource,
+  safeCtx,
+  safeCtxAsync,
   shouldShowIndicator,
 } from "../lib/autocompact-core.ts";
 
@@ -112,12 +115,16 @@ export default function autocompact(pi: ExtensionAPI) {
   }
 
   async function persistSettings(ctx: ExtensionContext): Promise<void> {
-    const target = (await directoryExists(join(ctx.cwd, ".pi"))) ? projectSettingsPath(ctx.cwd) : GLOBAL_SETTINGS_PATH;
-    try {
-      await writeFile(target, `${JSON.stringify(state.settings, null, 2)}\n`, "utf8");
-    } catch (error) {
-      ctx.ui.notify(`autocompact: could not persist settings (${(error as Error).message})`, "warning");
-    }
+    // A session replacement across the await below makes every ctx getter throw;
+    // treat that as a silent no-op (genuine write failures still warn).
+    await safeCtxAsync(async () => {
+      const target = (await directoryExists(join(ctx.cwd, ".pi"))) ? projectSettingsPath(ctx.cwd) : GLOBAL_SETTINGS_PATH;
+      try {
+        await writeFile(target, `${JSON.stringify(state.settings, null, 2)}\n`, "utf8");
+      } catch (error) {
+        ctx.ui.notify(`autocompact: could not persist settings (${(error as Error).message})`, "warning");
+      }
+    });
   }
 
   /**
@@ -133,48 +140,56 @@ export default function autocompact(pi: ExtensionAPI) {
    */
   async function syncNativeReserve(ctx: ExtensionContext): Promise<void> {
     if (state.settings.syncNativeReserve === false || !state.settings.enabled) return;
-    if (!(await directoryExists(join(ctx.cwd, ".pi")))) return; // no project scope to write to
-    const window = ctx.getContextUsage()?.contextWindow ?? ctx.model?.contextWindow ?? null;
-    const desired = computeNativeReserveTokens(window ?? null, state.settings);
-    if (desired === undefined) return;
-    if (state.nativeReserveWritten === desired) return; // already aligned this session
+    // Every ctx getter below throws once the session is replaced across an await
+    // (e.g. a fork during `directoryExists`); treat that as a silent no-op so the
+    // fire-and-forget turn_end call can never crash teardown. Genuine write
+    // failures still warn via the inner catch.
+    await safeCtxAsync(async () => {
+      if (!(await directoryExists(join(ctx.cwd, ".pi")))) return; // no project scope to write to
+      const window = ctx.getContextUsage()?.contextWindow ?? ctx.model?.contextWindow ?? null;
+      const desired = computeNativeReserveTokens(window ?? null, state.settings);
+      if (desired === undefined) return;
+      if (state.nativeReserveWritten === desired) return; // already aligned this session
 
-    const path = piProjectSettingsPath(ctx.cwd);
-    const raw = (await readSettingsFile(path)) as Record<string, unknown> | undefined;
-    const current = (raw?.compaction as { reserveTokens?: unknown } | undefined)?.reserveTokens;
-    if (current === desired) {
-      state.nativeReserveWritten = desired;
-      return;
-    }
-    const next = { ...(raw ?? {}) } as Record<string, unknown>;
-    next.compaction = { ...((raw?.compaction as Record<string, unknown>) ?? {}), reserveTokens: desired };
-    try {
-      await writeFile(path, `${JSON.stringify(next, null, 2)}\n`, "utf8");
-      state.nativeReserveWritten = desired;
-      if (ctx.mode === "tui" && current !== undefined) {
-        // Only announce real changes to an existing value; first-time setup is silent.
-        ctx.ui.notify("autocompact: mid-run compaction re-aligned (applies next session)", "info");
+      const path = piProjectSettingsPath(ctx.cwd);
+      const raw = (await readSettingsFile(path)) as Record<string, unknown> | undefined;
+      const current = (raw?.compaction as { reserveTokens?: unknown } | undefined)?.reserveTokens;
+      if (current === desired) {
+        state.nativeReserveWritten = desired;
+        return;
       }
-    } catch (error) {
-      ctx.ui.notify(`autocompact: could not align mid-run reserve (${(error as Error).message})`, "warning");
-    }
+      const next = { ...(raw ?? {}) } as Record<string, unknown>;
+      next.compaction = { ...((raw?.compaction as Record<string, unknown>) ?? {}), reserveTokens: desired };
+      try {
+        await writeFile(path, `${JSON.stringify(next, null, 2)}\n`, "utf8");
+        state.nativeReserveWritten = desired;
+        if (ctx.mode === "tui" && current !== undefined) {
+          // Only announce real changes to an existing value; first-time setup is silent.
+          ctx.ui.notify("autocompact: mid-run compaction re-aligned (applies next session)", "info");
+        }
+      } catch (error) {
+        ctx.ui.notify(`autocompact: could not align mid-run reserve (${(error as Error).message})`, "warning");
+      }
+    });
   }
 
   function updateIndicator(ctx: ExtensionContext): void {
-    if (!ctx.hasUI || ctx.mode !== "tui") return;
-    const usage = ctx.getContextUsage();
-    const tokens = usage?.tokens ?? null;
-    const contextWindow = usage?.contextWindow ?? null;
-    if (tokens === null || contextWindow === null || !shouldShowIndicator(tokens, contextWindow, state.settings)) {
-      ctx.ui.setStatus(UI_KEY, undefined);
-      ctx.ui.setWidget(UI_KEY, undefined);
-      return;
-    }
-    // Plain, compact string for the status area; colored bar for the widget so
-    // it reads as one system with the harness footer / provider-usage bars.
-    ctx.ui.setStatus(UI_KEY, formatIndicatorLine(tokens, contextWindow, state.settings));
-    const fg = (r: string, t: string) => ctx.ui.theme.fg(r as never, t);
-    ctx.ui.setWidget(UI_KEY, [formatIndicatorThemed(fg, tokens, contextWindow, state.settings)], { placement: "belowEditor" });
+    safeCtx(() => {
+      if (!ctx.hasUI || ctx.mode !== "tui") return;
+      const usage = ctx.getContextUsage();
+      const tokens = usage?.tokens ?? null;
+      const contextWindow = usage?.contextWindow ?? null;
+      if (tokens === null || contextWindow === null || !shouldShowIndicator(tokens, contextWindow, state.settings)) {
+        ctx.ui.setStatus(UI_KEY, undefined);
+        ctx.ui.setWidget(UI_KEY, undefined);
+        return;
+      }
+      // Plain, compact string for the status area; colored bar for the widget so
+      // it reads as one system with the harness footer / provider-usage bars.
+      ctx.ui.setStatus(UI_KEY, formatIndicatorLine(tokens, contextWindow, state.settings));
+      const fg = (r: string, t: string) => ctx.ui.theme.fg(r as never, t);
+      ctx.ui.setWidget(UI_KEY, [formatIndicatorThemed(fg, tokens, contextWindow, state.settings)], { placement: "belowEditor" });
+    });
   }
 
   function runCompaction(ctx: ExtensionContext, options: { auto: boolean; instructions?: string }): void {
@@ -186,64 +201,81 @@ export default function autocompact(pi: ExtensionAPI) {
         state.compacting = false;
         state.autoFailures = 0;
       },
+      // Pi invokes onError from inside a void-ed IIFE's catch block, so a throw
+      // here rejects a DETACHED promise → unhandled rejection → exit code 1, the
+      // same crash class as the turn_end sync. Compaction can fail long after a
+      // fork, so the ctx may be stale: keep state updates outside the guard (the
+      // failure counter must still advance) and guard only the ctx access.
       onError: (error) => {
         state.compacting = false;
         state.autoTriggered = false;
-        ctx.ui.notify(`autocompact: compaction failed — ${error.message}`, "error");
-        if (options.auto) {
-          state.autoFailures += 1;
-          if (state.autoFailures === MAX_AUTO_FAILURES) {
+        if (options.auto) state.autoFailures += 1;
+        safeCtx(() => {
+          ctx.ui.notify(`autocompact: compaction failed — ${error.message}`, "error");
+          if (options.auto && state.autoFailures === MAX_AUTO_FAILURES) {
             ctx.ui.notify(
               "autocompact: auto-compaction paused after repeated failures (Pi's built-in safety net still applies)",
               "warning",
             );
           }
-        }
+        });
       },
     });
   }
 
   function evaluate(ctx: ExtensionContext, canCompact: boolean): void {
-    const usage = ctx.getContextUsage();
-    const { decision, nextTier } = evaluateAutoCompact({
-      tokens: usage?.tokens ?? null,
-      contextWindow: usage?.contextWindow ?? null,
-      settings: state.settings,
-      lastTier: state.lastTier,
-      canCompact: canCompact && !state.compacting && state.autoFailures < MAX_AUTO_FAILURES,
-    });
-    state.lastTier = nextTier;
+    // Synchronous, but a stale ctx still throws from getContextUsage; no-op it.
+    safeCtx(() => {
+      const usage = ctx.getContextUsage();
+      const { decision, nextTier } = evaluateAutoCompact({
+        tokens: usage?.tokens ?? null,
+        contextWindow: usage?.contextWindow ?? null,
+        settings: state.settings,
+        lastTier: state.lastTier,
+        canCompact: canCompact && !state.compacting && state.autoFailures < MAX_AUTO_FAILURES,
+      });
+      state.lastTier = nextTier;
 
-    if (decision.action === "notify") {
-      ctx.ui.notify(decision.message, decision.severity);
-    } else if (decision.action === "compact") {
-      ctx.ui.notify(decision.message, "info");
-      runCompaction(ctx, { auto: true });
-    }
-    updateIndicator(ctx);
+      if (decision.action === "notify") {
+        ctx.ui.notify(decision.message, decision.severity);
+      } else if (decision.action === "compact") {
+        ctx.ui.notify(decision.message, "info");
+        runCompaction(ctx, { auto: true });
+      }
+      updateIndicator(ctx);
+    });
   }
 
   pi.on("session_start", async (_event, ctx) => {
-    await loadSettings(ctx.cwd);
-    state.lastTier = "none";
-    state.compacting = false;
-    state.autoTriggered = false;
-    state.autoFailures = 0;
-    state.nativeReserveWritten = undefined;
-    updateIndicator(ctx);
-    await syncNativeReserve(ctx);
+    await safeCtxAsync(async () => {
+      await loadSettings(ctx.cwd);
+      state.lastTier = "none";
+      state.compacting = false;
+      state.autoTriggered = false;
+      state.autoFailures = 0;
+      state.nativeReserveWritten = undefined;
+      updateIndicator(ctx);
+      await syncNativeReserve(ctx);
+    });
   });
 
   // Warnings + indicator refresh during a run (never compacts mid-run); also a
   // reliable point to align Pi's native mid-run reserve (context window known).
   pi.on("turn_end", (_event, ctx) => {
     evaluate(ctx, false);
-    void syncNativeReserve(ctx);
+    // Fire-and-forget background sync. syncNativeReserve no-ops on a stale ctx;
+    // the catch guarantees a residual rejection can never crash teardown.
+    void syncNativeReserve(ctx).catch((error) => {
+      if (isStaleCtxError(error)) return;
+      // Stay on the SDK's UI channel (a raw stderr write would corrupt the TUI frame).
+      safeCtx(() => ctx.ui.notify(`autocompact: native reserve sync failed — ${(error as Error).message}`, "warning"));
+    });
   });
 
   // Safe boundary: no retry/compaction/continuation pending. Compact here.
   pi.on("agent_settled", (_event, ctx) => {
-    evaluate(ctx, ctx.isIdle() && !ctx.hasPendingMessages());
+    // Arguments evaluate before evaluate()'s own guard, so guard them here too.
+    evaluate(ctx, safeCtx(() => ctx.isIdle() && !ctx.hasPendingMessages()) ?? false);
   });
 
   pi.on("model_select", async (_event, ctx) => {
@@ -262,27 +294,31 @@ export default function autocompact(pi: ExtensionAPI) {
     state.compacting = false;
     state.autoTriggered = false;
     state.autoFailures = 0;
-    ctx.ui.notify(
-      formatCompactionReport({
-        tokensBefore: event.compactionEntry.tokensBefore,
-        source,
-      }),
-      "info",
+    safeCtx(() =>
+      ctx.ui.notify(
+        formatCompactionReport({
+          tokensBefore: event.compactionEntry.tokensBefore,
+          source,
+        }),
+        "info",
+      ),
     );
     updateIndicator(ctx);
   });
 
   pi.on("session_before_compact", (event, ctx) => {
     if (event.reason === "overflow") {
-      ctx.ui.notify("Context overflow — running emergency compaction", "warning");
+      safeCtx(() => ctx.ui.notify("Context overflow — running emergency compaction", "warning"));
     }
   });
 
   // Clean up the indicator status/widget we own so it never leaks past shutdown.
   pi.on("session_shutdown", (_event, ctx) => {
-    if (ctx.mode !== "tui") return;
-    ctx.ui.setStatus(UI_KEY, undefined);
-    ctx.ui.setWidget(UI_KEY, undefined);
+    safeCtx(() => {
+      if (ctx.mode !== "tui") return;
+      ctx.ui.setStatus(UI_KEY, undefined);
+      ctx.ui.setWidget(UI_KEY, undefined);
+    });
   });
 
   pi.registerCommand("autocompact", {
@@ -295,50 +331,54 @@ export default function autocompact(pi: ExtensionAPI) {
       return items.length > 0 ? items : null;
     },
     handler: async (args: string, ctx: ExtensionCommandContext) => {
-      const cmd = parseAutoCompactCommand(args);
+      // ctx is used after the persist/sync awaits below; a session replacement
+      // across them makes every getter throw — no-op that silently.
+      await safeCtxAsync(async () => {
+        const cmd = parseAutoCompactCommand(args);
 
-      switch (cmd.kind) {
-        case "status": {
-          const usage = ctx.getContextUsage();
-          ctx.ui.notify(
-            formatStatusText({
-              settings: state.settings,
-              tokens: usage?.tokens ?? null,
-              contextWindow: usage?.contextWindow ?? ctx.model?.contextWindow ?? null,
-            }),
-            "info",
-          );
-          return;
-        }
-        case "help":
-          ctx.ui.notify(AUTOCOMPACT_HELP_TEXT, "info");
-          return;
-        case "error":
-          ctx.ui.notify(cmd.message, "error");
-          return;
-        case "now": {
-          if (!ctx.isIdle()) await ctx.waitForIdle();
-          ctx.ui.notify("Compacting context…", "info");
-          runCompaction(ctx, { auto: false, instructions: cmd.instructions });
-          return;
-        }
-        default: {
-          const result = applyAutoCompactCommand(state.settings, cmd);
-          if (result.error) {
-            ctx.ui.notify(result.error, "error");
+        switch (cmd.kind) {
+          case "status": {
+            const usage = ctx.getContextUsage();
+            ctx.ui.notify(
+              formatStatusText({
+                settings: state.settings,
+                tokens: usage?.tokens ?? null,
+                contextWindow: usage?.contextWindow ?? ctx.model?.contextWindow ?? null,
+              }),
+              "info",
+            );
             return;
           }
-          state.settings = result.settings;
-          state.lastTier = "none"; // re-arm warnings for the new thresholds
-          if (result.changed) {
-            await persistSettings(ctx);
-            state.nativeReserveWritten = undefined; // trigger/tokens/native may have changed
-            await syncNativeReserve(ctx);
+          case "help":
+            ctx.ui.notify(AUTOCOMPACT_HELP_TEXT, "info");
+            return;
+          case "error":
+            ctx.ui.notify(cmd.message, "error");
+            return;
+          case "now": {
+            if (!ctx.isIdle()) await ctx.waitForIdle();
+            ctx.ui.notify("Compacting context…", "info");
+            runCompaction(ctx, { auto: false, instructions: cmd.instructions });
+            return;
           }
-          if (result.reply) ctx.ui.notify(result.reply, "info");
-          updateIndicator(ctx);
+          default: {
+            const result = applyAutoCompactCommand(state.settings, cmd);
+            if (result.error) {
+              ctx.ui.notify(result.error, "error");
+              return;
+            }
+            state.settings = result.settings;
+            state.lastTier = "none"; // re-arm warnings for the new thresholds
+            if (result.changed) {
+              await persistSettings(ctx);
+              state.nativeReserveWritten = undefined; // trigger/tokens/native may have changed
+              await syncNativeReserve(ctx);
+            }
+            if (result.reply) ctx.ui.notify(result.reply, "info");
+            updateIndicator(ctx);
+          }
         }
-      }
+      });
     },
   });
 }

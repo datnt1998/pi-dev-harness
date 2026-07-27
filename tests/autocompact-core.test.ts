@@ -13,12 +13,16 @@ import {
   renderCompactBarThemed,
   formatStatusText,
   formatTokens,
+  isStaleCtxError,
   normalizeAutoCompactSettings,
   parseAutoCompactCommand,
   resolveCompactionSource,
   resolveThresholds,
   resolveTier,
+  safeCtx,
+  safeCtxAsync,
   shouldShowIndicator,
+  STALE_CTX_MARKER,
 } from "../lib/autocompact-core.ts";
 
 const WINDOW_200K = 200_000;
@@ -394,4 +398,48 @@ test("status text reports usage, thresholds, or unknown state", () => {
 
   const unknown = formatStatusText({ settings, tokens: null, contextWindow: null });
   assert.match(unknown, /Context: unknown/);
+});
+
+test("isStaleCtxError matches only the SDK stale-ctx marker", () => {
+  assert.equal(isStaleCtxError(new Error(STALE_CTX_MARKER)), true);
+  assert.equal(isStaleCtxError(new Error(`${STALE_CTX_MARKER}. Do not use a captured pi...`)), true);
+  assert.equal(isStaleCtxError(new Error("boom: genuine failure")), false);
+  assert.equal(isStaleCtxError(new Error("stale")), false);
+  assert.equal(isStaleCtxError(STALE_CTX_MARKER), false, "non-Error values are never stale");
+  assert.equal(isStaleCtxError(undefined), false);
+  assert.equal(isStaleCtxError(null), false);
+});
+
+test("safeCtx returns undefined on stale and rethrows genuine errors", () => {
+  assert.equal(safeCtx(() => 42), 42);
+  assert.equal(
+    safeCtx(() => {
+      throw new Error(STALE_CTX_MARKER);
+    }),
+    undefined,
+  );
+  assert.throws(
+    () =>
+      safeCtx(() => {
+        throw new Error("boom: genuine failure");
+      }),
+    /genuine failure/,
+  );
+});
+
+test("safeCtxAsync resolves undefined on stale and rejects genuine errors", async () => {
+  assert.equal(await safeCtxAsync(async () => 7), 7);
+  assert.equal(
+    await safeCtxAsync(async () => {
+      throw new Error(STALE_CTX_MARKER);
+    }),
+    undefined,
+  );
+  await assert.rejects(
+    () =>
+      safeCtxAsync(async () => {
+        throw new Error("boom: genuine failure");
+      }),
+    /genuine failure/,
+  );
 });
