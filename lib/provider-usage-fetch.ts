@@ -13,15 +13,47 @@ import { parseClaudeUsage, parseCodexUsage, type UsageState } from "./provider-u
 
 export const USAGE_PROVIDERS = new Set(["anthropic", "openai-codex"]);
 
+export type QuotaTarget = { provider: string; providerIdentity: string };
+
+/**
+ * Resolve one session-stable quota target. A trusted project may select a
+ * provider independently of the active model in `.pi/quota-gate.json`:
+ * `{ "provider": "...", "providerIdentity": "optional-stable-account-key" }`.
+ */
+export function resolveQuotaTarget(cwd: string, fallbackProvider?: string): QuotaTarget | null {
+  let configuredProvider: string | undefined;
+  let configuredIdentity: string | undefined;
+  try {
+    const raw = JSON.parse(readFileSync(join(cwd, ".pi", "quota-gate.json"), "utf8")) as { provider?: unknown; providerIdentity?: unknown };
+    if (typeof raw.provider === "string") configuredProvider = raw.provider;
+    if (typeof raw.providerIdentity === "string" && raw.providerIdentity.trim()) configuredIdentity = raw.providerIdentity.trim();
+  } catch {
+    // Optional configuration. UI-only fallback is frozen at session start.
+  }
+  const provider = configuredProvider ?? fallbackProvider;
+  if (!provider || !USAGE_PROVIDERS.has(provider)) return null;
+  if (configuredIdentity) return { provider, providerIdentity: configuredIdentity };
+  const auth = readProviderAuth(provider);
+  const account = auth.accountId ?? auth.account_id ?? auth.organizationId ?? auth.organization_id;
+  return { provider, providerIdentity: typeof account === "string" && account ? `${provider}/${account}` : provider };
+}
+
+export function defaultQuotaLedgerPath(): string {
+  const dir = process.env.PI_CODING_AGENT_DIR || join(homedir(), ".pi", "agent");
+  return join(dir, "quota-ledgers.json");
+}
+
 /** HTTP error carrying the status and a parsed Retry-After (ms) for backoff. */
 export class UsageError extends Error {
   status?: number;
   retryAfterMs?: number;
+  quotaStatus: "auth-error" | "fetch-error";
   constructor(message: string, status?: number, retryAfterMs?: number) {
     super(message);
     this.name = "UsageError";
     this.status = status;
     this.retryAfterMs = retryAfterMs;
+    this.quotaStatus = status === 401 || status === 403 ? "auth-error" : "fetch-error";
   }
 }
 
@@ -62,7 +94,7 @@ async function fetchJson(url: string, headers: Record<string, string>, signal: A
 export async function fetchUsage(provider: string, signal: AbortSignal): Promise<UsageState> {
   const auth = readProviderAuth(provider);
   const token = (auth.access ?? auth.token ?? auth.access_token) as string | undefined;
-  if (!token || typeof token !== "string") throw new Error(`Missing ${provider} OAuth access token`);
+  if (!token || typeof token !== "string") throw new UsageError(`Missing ${provider} OAuth access token`, 401);
 
   if (provider === "anthropic") {
     const data = await fetchJson("https://api.anthropic.com/api/oauth/usage", {

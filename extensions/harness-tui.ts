@@ -22,16 +22,15 @@ import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { basename, join } from "node:path";
 import { homedir } from "node:os";
 import { contextSeverity, formatContextLabel, formatSessionCost, getFooterLayout, shortenPath } from "../lib/tui-core.ts";
-import { formatUsageThemed, type UsageState } from "../lib/provider-usage-core.ts";
-import { USAGE_PROVIDERS, UsageError, fetchUsage } from "../lib/provider-usage-fetch.ts";
+import { formatQuotaSnapshotThemed } from "../lib/provider-usage-core.ts";
+import { defaultQuotaLedgerPath, fetchUsage, resolveQuotaTarget } from "../lib/provider-usage-fetch.ts";
+import { JsonQuotaLedgerStore, getProviderQuotaAuthority, type ProviderQuotaAuthority } from "../lib/provider-usage-service.ts";
 
 type Settings = { enabled: boolean; label?: string; showUsage: boolean };
 const DEFAULTS: Settings = { enabled: true, showUsage: true };
 const SEP = " │ ";
-// Usage endpoints are themselves rate-limited and change slowly; poll gently and
-// collapse bursty session/model triggers so we never hammer them into a 429.
+// The shared authority deduplicates fetches; the footer only requests cadence.
 const REFRESH_MS = 5 * 60_000;
-const MIN_FETCH_GAP_MS = 60_000;
 
 function configPath(cwd: string): string {
   return join(cwd, ".pi", "harness-tui.json");
@@ -74,54 +73,26 @@ export default function harnessTui(pi: ExtensionAPI) {
     running: false,
     thinking: "off",
     branch: undefined as string | undefined,
-    usage: undefined as UsageState | undefined,
     usageLoading: false,
   };
   let lastCtx: ExtensionContext | undefined;
   let footerTui: { requestRender(): void } | undefined;
   let controller: AbortController | undefined;
-  let generation = 0;
   let timer: ReturnType<typeof setInterval> | undefined;
-  let cooldownUntil = 0;
-  let lastFetchAt = 0;
-  let lastProvider: string | undefined;
+  let authority: ProviderQuotaAuthority | undefined;
+  let unsubscribeQuota: (() => void) | undefined;
 
   const sev = { ok: "dim", warn: "warning", critical: "error" } as const;
 
-  const usageProvider = (ctx: ExtensionContext) => {
-    const p = ctx.model?.provider;
-    return p && USAGE_PROVIDERS.has(p) ? p : undefined;
-  };
-
-  async function refreshUsage(ctx: ExtensionContext, force = false): Promise<void> {
-    const p = usageProvider(ctx);
-    if (!state.settings.enabled || !state.settings.showUsage || !p) return;
-    if (Date.now() < cooldownUntil) return; // backing off after a rate-limit
-    if (!force && Date.now() - lastFetchAt < MIN_FETCH_GAP_MS) return; // collapse bursty triggers
-    lastFetchAt = Date.now();
+  async function refreshUsage(ctx: ExtensionContext): Promise<void> {
+    if (!state.settings.enabled || !state.settings.showUsage || !authority) return;
     controller?.abort();
     controller = new AbortController();
-    const mine = ++generation;
     state.usageLoading = true;
     footerTui?.requestRender();
-    try {
-      const usage = await fetchUsage(p, controller.signal);
-      if (mine === generation) { state.usage = usage; cooldownUntil = 0; }
-    } catch (error) {
-      if (mine !== generation) return;
-      const e = error as UsageError;
-      if (e.status === 429) cooldownUntil = Date.now() + (e.retryAfterMs ?? 5 * 60_000);
-      // Keep last-good bars if we have them; only surface an error line when empty.
-      if (!state.usage || state.usage.windows.length === 0) {
-        const msg = e.status === 429 ? "rate-limited" : e.status ? `n/a (${e.status})` : "n/a";
-        state.usage = { provider: p, windows: [], updatedAt: Date.now(), error: msg };
-      }
-    } finally {
-      if (mine === generation) {
-        state.usageLoading = false;
-        footerTui?.requestRender();
-      }
-    }
+    await authority.refresh(controller.signal);
+    state.usageLoading = false;
+    footerTui?.requestRender();
   }
 
   async function refreshBranch(cwd: string): Promise<void> {
@@ -139,7 +110,7 @@ export default function harnessTui(pi: ExtensionAPI) {
     }
     const label = state.settings.label ?? basename(ctx.cwd) ?? ctx.cwd;
     const showUsage = state.settings.showUsage;
-    const hasProvider = !!usageProvider(ctx);
+    const hasProvider = !!authority;
 
     ctx.ui.setFooter((tui, theme, footerData) => {
       footerTui = tui;
@@ -166,9 +137,9 @@ export default function harnessTui(pi: ExtensionAPI) {
           // Second line: colored provider quota (only where there is room).
           const usageLine =
             showUsage && hasProvider && width >= 100
-              ? state.usageLoading && !state.usage
+              ? state.usageLoading && authority?.snapshot.status === "unknown"
                 ? dim("Usage loading…")
-                : formatUsageThemed(fg, state.usage, { barWidth: width >= 140 ? 10 : 8 })
+                : formatQuotaSnapshotThemed(fg, authority?.snapshot, { barWidth: width >= 140 ? 10 : 8 })
               : undefined;
 
           let main: string;
@@ -200,9 +171,17 @@ export default function harnessTui(pi: ExtensionAPI) {
     state.thinking = pi.getThinkingLevel();
     state.running = false;
     await refreshBranch(ctx.cwd);
+    const target = resolveQuotaTarget(ctx.cwd, ctx.model?.provider);
+    if (target) {
+      authority = getProviderQuotaAuthority({
+        ...target,
+        fetchUsage,
+        store: new JsonQuotaLedgerStore(defaultQuotaLedgerPath()),
+      });
+      unsubscribeQuota = authority.subscribe(() => footerTui?.requestRender());
+    }
     render(ctx);
-    lastProvider = usageProvider(ctx);
-    void refreshUsage(ctx, true);
+    void refreshUsage(ctx);
     timer = setInterval(() => { if (lastCtx) void refreshUsage(lastCtx); }, REFRESH_MS);
   });
   pi.on("agent_start", (_event, ctx) => { state.running = true; render(ctx); });
@@ -210,16 +189,16 @@ export default function harnessTui(pi: ExtensionAPI) {
   pi.on("thinking_level_select", (event, ctx) => { state.thinking = event.level; render(ctx); });
   pi.on("model_select", (_event, ctx) => {
     state.thinking = pi.getThinkingLevel();
-    const p = usageProvider(ctx);
-    const changed = p !== lastProvider;
-    lastProvider = p;
-    if (changed) state.usage = undefined; // provider switched: fetch fresh, bypass throttle
     render(ctx);
-    if (changed) void refreshUsage(ctx, true);
+    void refreshUsage(ctx);
+  });
+  pi.on("after_provider_response", (event, ctx) => {
+    if (event.status === 401 || event.status === 403 || event.status === 429) void refreshUsage(ctx);
   });
   pi.on("session_shutdown", (_event, ctx) => {
-    generation += 1;
     controller?.abort();
+    unsubscribeQuota?.();
+    unsubscribeQuota = undefined;
     if (timer) clearInterval(timer);
     timer = undefined;
     if (ctx.mode === "tui") ctx.ui.setFooter(undefined);
@@ -244,14 +223,14 @@ export default function harnessTui(pi: ExtensionAPI) {
       if (cmd === "on" || cmd === "off") {
         state.settings.enabled = cmd === "on";
         persist();
-        if (lastCtx) { render(lastCtx); if (cmd === "on") void refreshUsage(lastCtx, true); }
+        if (lastCtx) { render(lastCtx); if (cmd === "on") void refreshUsage(lastCtx); }
         ctx.ui.notify(`harness-tui ${cmd}`, "info");
         return;
       }
       if (cmd === "usage-on" || cmd === "usage-off") {
         state.settings.showUsage = cmd === "usage-on";
         persist();
-        if (lastCtx) { render(lastCtx); if (cmd === "usage-on") void refreshUsage(lastCtx, true); }
+        if (lastCtx) { render(lastCtx); if (cmd === "usage-on") void refreshUsage(lastCtx); }
         ctx.ui.notify(`harness-tui usage ${cmd === "usage-on" ? "on" : "off"}`, "info");
         return;
       }

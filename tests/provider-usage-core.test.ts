@@ -13,7 +13,10 @@ import {
   resolveSecondaryWindowLabel,
   usageRole,
   usageSeverity,
+  toUsageQuotaInput,
+  formatQuotaSnapshotThemed,
 } from "../lib/provider-usage-core.ts";
+import { buildPremiumQuotaSnapshot, createQuotaLedger } from "../lib/quota-gate-core.ts";
 
 test("clampPercent bounds and null-guards", () => {
   assert.equal(clampPercent(-5), 0);
@@ -96,6 +99,46 @@ test("themed formatters route text through the injected fg and stay content-stab
   // identity fg reproduces the plain content without styling markers
   const plainish = formatUsageThemed((_r, t) => t, state, { barWidth: 4, showReset: true, now: 0 });
   assert.match(plainish, /^Claude {2}5h \[.+\] 76% left · reset 1m$/);
+});
+
+test("provider parsers expose semantic windows and preserve absent values", () => {
+  const claude = parseClaudeUsage({
+    five_hour: { utilization: 20, resets_at: "2026-02-01T15:00:00Z" },
+    seven_day: { utilization: 10, resets_at: "2026-02-08T00:00:00Z" },
+    seven_day_sonnet: { utilization: 30, resets_at: "2026-02-08T00:00:00Z" },
+  }, 1_000);
+  assert.deepEqual(claude.windows.map((window) => window.kind), ["short", "weekly", "premium-weekly"]);
+  const normalized = toUsageQuotaInput(claude);
+  assert.equal(normalized.shortWindow?.remainingPercent, 80);
+  assert.equal(normalized.weekly?.remainingPercent, 90);
+  assert.equal(normalized.premiumSpecificWeekly?.remainingPercent, 70);
+  assert.equal(normalized.premiumSpecificWeekly?.resetAt, "2026-02-08T00:00:00.000Z");
+  assert.equal(normalized.allowSingleWeeklyWindow, false);
+
+  const codex = toUsageQuotaInput(parseCodexUsage({
+    rate_limit: {
+      primary_window: { limit_window_seconds: 10_800, used_percent: 0, reset_at: 100 },
+      secondary_window: { limit_window_seconds: 604_800, reset_at: 200 },
+    },
+  }, 1_000));
+  assert.equal(codex.shortWindow?.usedPercent, 0);
+  assert.equal(codex.weekly?.usedPercent, null, "absent is not coerced to zero");
+  assert.equal(codex.weekly?.remainingPercent, null);
+  assert.equal(codex.allowSingleWeeklyWindow, true);
+});
+
+test("quota UI formats freshness, band, balances, and gate reason from the shared snapshot", () => {
+  const input = toUsageQuotaInput(parseCodexUsage({ rate_limit: {
+    primary_window: { limit_window_seconds: 10_800, used_percent: 20, reset_at: 1_800_000_000 },
+    secondary_window: { limit_window_seconds: 604_800, used_percent: 30, reset_at: 1_800_604_800 },
+  } }, 1_700_000_000_000));
+  const ledger = createQuotaLedger(new Date(1_800_604_800_000).toISOString(), 70);
+  const snapshot = buildPremiumQuotaSnapshot(input, ledger, 1_700_000_060_000);
+  const line = formatQuotaSnapshotThemed((_role, text) => text, snapshot, { barWidth: 4 });
+  assert.match(line, /fresh 1m/i);
+  assert.match(line, /healthy/i);
+  assert.match(line, /main 50%/i);
+  assert.match(line, /gate ready/i);
 });
 
 test("formatUsageLine renders plain, theme-free quota line", () => {

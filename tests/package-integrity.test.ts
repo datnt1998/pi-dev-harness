@@ -30,6 +30,8 @@ test("package exposes the expected portable resource surface", () => {
     "extensions/provider-usage.ts",
     "lib/provider-usage-core.ts",
     "lib/provider-usage-fetch.ts",
+    "lib/provider-usage-service.ts",
+    "lib/quota-gate-core.ts",
     "extensions/autocompact.ts",
     "lib/autocompact-core.ts",
     "templates/APPEND_SYSTEM.md",

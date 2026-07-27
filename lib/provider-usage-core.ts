@@ -5,11 +5,15 @@
  * provider responses and formats a plain-text line, so it is unit testable.
  */
 
+import type { PremiumQuotaSnapshot, QuotaWindow } from "./quota-gate-core.ts";
+
 export type UsageWindow = {
-  /** Short window label, e.g. "5h", "Week", "Sonnet". */
+  /** Short window label, e.g. "5h", "Week", or a premium-specific window. */
   label: string;
-  /** Percent of the window already used, 0..100. */
-  usedPercent: number;
+  /** Semantic role used by the quota snapshot; labels remain presentation-only. */
+  kind?: "short" | "weekly" | "premium-weekly";
+  /** Percent of the window already used, 0..100; null means absent. */
+  usedPercent: number | null;
   /** Epoch ms when the window resets, when known. */
   resetAt?: number;
 };
@@ -20,6 +24,9 @@ export type UsageState = {
   windows: UsageWindow[];
   updatedAt: number;
   error?: string;
+  quotaStatus?: "ready" | "partial" | "auth-error" | "fetch-error" | "unknown";
+  /** Provider-contract permission to use one weekly window without a premium-specific peer. */
+  allowSingleWeeklyWindow?: boolean;
 };
 
 export function clampPercent(value: number): number {
@@ -99,6 +106,7 @@ export function formatUsageThemed(
   const showReset = opts.showReset ?? true;
   const now = opts.now ?? Date.now();
   const parts = state.windows.map((w) => {
+    if (w.usedPercent === null) return `${fg("dim", w.label)} ${fg("muted", "n/a")}`;
     const left = Math.max(0, 100 - w.usedPercent);
     const role = usageRole(left);
     const reset = showReset && w.resetAt ? fg("dim", ` \u00b7 reset ${formatDurationCompact(w.resetAt - now)}`) : "";
@@ -119,6 +127,7 @@ export function parseClaudeUsage(data: any, now = Date.now()): UsageState {
   if (data?.five_hour?.utilization !== undefined) {
     windows.push({
       label: "5h",
+      kind: "short",
       usedPercent: clampPercent(data.five_hour.utilization),
       resetAt: data.five_hour.resets_at ? new Date(data.five_hour.resets_at).getTime() : undefined,
     });
@@ -126,16 +135,22 @@ export function parseClaudeUsage(data: any, now = Date.now()): UsageState {
   if (data?.seven_day?.utilization !== undefined) {
     windows.push({
       label: "Week",
+      kind: "weekly",
       usedPercent: clampPercent(data.seven_day.utilization),
       resetAt: data.seven_day.resets_at ? new Date(data.seven_day.resets_at).getTime() : undefined,
     });
   }
   const modelWindow = data?.seven_day_sonnet || data?.seven_day_opus;
   if (modelWindow?.utilization !== undefined) {
-    windows.push({ label: data?.seven_day_sonnet ? "Sonnet" : "Opus", usedPercent: clampPercent(modelWindow.utilization) });
+    windows.push({
+      label: data?.seven_day_sonnet ? "Sonnet" : "Opus",
+      kind: "premium-weekly",
+      usedPercent: clampPercent(modelWindow.utilization),
+      resetAt: modelWindow.resets_at ? new Date(modelWindow.resets_at).getTime() : undefined,
+    });
   }
   const plan = typeof data?.plan_type === "string" ? data.plan_type : undefined;
-  return { provider: "anthropic", plan, windows, updatedAt: now };
+  return { provider: "anthropic", plan, windows, updatedAt: now, quotaStatus: "ready", allowSingleWeeklyWindow: false };
 }
 
 /** Parse OpenAI Codex usage (`chatgpt.com/backend-api/wham/usage`). */
@@ -146,7 +161,8 @@ export function parseCodexUsage(data: any, now = Date.now()): UsageState {
     const windowHours = Math.round((primary.limit_window_seconds || 10_800) / 3600);
     windows.push({
       label: `${windowHours}h`,
-      usedPercent: clampPercent(primary.used_percent || 0),
+      kind: "short",
+      usedPercent: primary.used_percent === undefined || primary.used_percent === null ? null : clampPercent(primary.used_percent),
       resetAt: primary.reset_at ? primary.reset_at * 1000 : undefined,
     });
   }
@@ -155,7 +171,8 @@ export function parseCodexUsage(data: any, now = Date.now()): UsageState {
     const windowHours = Math.round((secondary.limit_window_seconds || 604_800) / 3600);
     windows.push({
       label: resolveSecondaryWindowLabel({ windowHours, primaryResetAt: primary?.reset_at, secondaryResetAt: secondary.reset_at }),
-      usedPercent: clampPercent(secondary.used_percent || 0),
+      kind: "weekly",
+      usedPercent: secondary.used_percent === undefined || secondary.used_percent === null ? null : clampPercent(secondary.used_percent),
       resetAt: secondary.reset_at ? secondary.reset_at * 1000 : undefined,
     });
   }
@@ -165,7 +182,50 @@ export function parseCodexUsage(data: any, now = Date.now()): UsageState {
     const n = typeof balance === "number" ? balance : Number.parseFloat(balance) || 0;
     plan = plan ? `${plan} ($${n.toFixed(2)})` : `$${n.toFixed(2)}`;
   }
-  return { provider: "openai-codex", plan, windows, updatedAt: now };
+  return { provider: "openai-codex", plan, windows, updatedAt: now, quotaStatus: "ready", allowSingleWeeklyWindow: true };
+}
+
+function quotaWindow(window: UsageWindow | undefined): QuotaWindow | null {
+  if (!window) return null;
+  const usedPercent = window.usedPercent;
+  return {
+    usedPercent,
+    remainingPercent: usedPercent === null ? null : Math.max(0, 100 - usedPercent),
+    resetAt: typeof window.resetAt === "number" && Number.isFinite(window.resetAt) ? new Date(window.resetAt).toISOString() : null,
+  };
+}
+
+/** Normalize the existing provider fetch result into the launch-authority input. */
+export function toUsageQuotaInput(state: UsageState) {
+  return {
+    fetchedAt: new Date(state.updatedAt).toISOString(),
+    status: state.quotaStatus ?? (state.error ? "fetch-error" : "unknown"),
+    shortWindow: quotaWindow(state.windows.find((window) => window.kind === "short")),
+    weekly: quotaWindow(state.windows.find((window) => window.kind === "weekly")),
+    premiumSpecificWeekly: quotaWindow(state.windows.find((window) => window.kind === "premium-weekly")),
+    allowSingleWeeklyWindow: state.allowSingleWeeklyWindow === true,
+  } as const;
+}
+
+/** Shared snapshot rendering for both quota widgets; never used as launch authority. */
+export function formatQuotaSnapshotThemed(
+  fg: Fg,
+  snapshot: PremiumQuotaSnapshot | undefined,
+  opts: { barWidth?: number } = {},
+): string {
+  if (!snapshot) return fg("dim", "Usage quota n/a · gate unavailable");
+  const width = opts.barWidth ?? 8;
+  const weekly = snapshot.effectiveWeeklyRemainingPercent;
+  const short = snapshot.shortWindow?.remainingPercent ?? null;
+  const windowParts = [
+    short === null ? `${fg("dim", "Short")} ${fg("muted", "n/a")}` : `${fg("dim", "Short")} ${renderBarThemed(fg, short, width)} ${fg(usageRole(short), `${short.toFixed(0)}% left`)}`,
+    weekly === null ? `${fg("dim", "Week")} ${fg("muted", "n/a")}` : `${fg("dim", "Week")} ${renderBarThemed(fg, weekly, width)} ${fg(usageRole(weekly), `${weekly.toFixed(0)}% left`)}`,
+  ];
+  const age = Number.isFinite(snapshot.ageMs) ? formatDurationCompact(snapshot.ageMs) : "unknown";
+  const balances = snapshot.categoryBalances
+    ? `main ${snapshot.categoryBalances.main.toFixed(0)}% · review ${snapshot.categoryBalances["production-review"].toFixed(0)}% · arb ${snapshot.categoryBalances.arbitration.toFixed(0)}% · emergency ${snapshot.categoryBalances.emergency.toFixed(0)}%`
+    : "balances n/a";
+  return `${windowParts.join(fg("dim", " │ "))}${fg("dim", ` │ ${snapshot.freshness} ${age} │ ${snapshot.band} │ ${balances} │ gate ${snapshot.gateReason}`)}`;
 }
 
 export function renderBar(leftPercent: number, width = 10): string {
@@ -189,6 +249,7 @@ export function formatUsageLine(
   const showReset = opts.showReset ?? true;
   const now = opts.now ?? Date.now();
   const parts = state.windows.map((w) => {
+    if (w.usedPercent === null) return `${w.label} n/a`;
     const left = Math.max(0, 100 - w.usedPercent);
     const reset = showReset && w.resetAt ? ` · reset ${formatDurationCompact(w.resetAt - now)}` : "";
     return `${w.label} ${renderBar(left, barWidth)} ${left.toFixed(0)}% left${reset}`;
