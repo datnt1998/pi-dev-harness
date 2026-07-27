@@ -88,20 +88,16 @@ Use `pi-subagents` when it improves isolation or review quality:
 
 - `scout` / `context-builder` — fresh-context repository reconnaissance and handoff material.
 - `researcher` — fresh-context web/docs research with citations.
-- `planner` — plan from approved context; fork only when inherited session decisions matter; no edits.
-- `worker` — the sole writer for an approved implementation or fix pass; normally forked.
+- `planner` — plan from an approved spec; fresh unless the normative context gates permit a narrative-history fork; no edits.
+- `worker` — the sole writer for an approved implementation or fix pass; fresh with a written brief by default.
 - `reviewer` — fresh-context, review-only independent checks.
-- `oracle` — normally forked advisory review for risky decisions or context drift; no edits unless explicitly assigned as the sole writer.
+- `oracle` — fresh advisory review for risky decisions or context drift; no edits unless explicitly assigned as the sole writer.
 
-Operational defaults:
+Every subagent launch **must** follow `references/delegation-policy.md`, the single normative source for attribution, brief shape, routing, fresh/fork choice, explicit acceptance, concurrency, budgets, control, claim verification, and fan-in evidence. Do not replace it with package inference or role-name assumptions.
 
-- Call subagents asynchronously unless foreground interaction is intentionally required; keep doing independent parent work, then use `wait()` when the result is required.
-- Keep one writer per active worktree. Parallelize reconnaissance, research, review, and validation—not ordinary writes. Use isolated worktrees only for intentionally parallel writers.
-- Define a lightweight validation contract before a writer starts: expected behavior, acceptance checks, commands or user flows, and evidence required in the handoff.
-- Treat a worker handoff as intermediate. Run fresh reviewers, preserve their separate evidence, synthesize accepted fixes, and use one fix writer when needed. Re-review substantial fixes.
-- Omit `acceptance` to use package inference. To explicitly disable it, use `false` (or `{ level: "none", reason: "..." }`), not bare `"none"`. `reviewed` applies to a writer workflow requiring independent review, not to a review-only child.
+Treat a worker handoff as intermediate: validate from the parent, run independent review, synthesize accepted fixes through one writer, and re-review substantial fixes. When both review axes are required and genuinely sealed, they may run in parallel under the policy.
 
-For parallel review, prefer two focused fresh-context reviewers:
+For two-axis review, use focused fresh-context reviewers:
 
 - Standards reviewer: coding standards, maintainability, smells, simplicity.
 - Spec reviewer: requested behavior, acceptance criteria, tests, and validation evidence.
@@ -181,6 +177,7 @@ Load only when needed:
 - `references/pi-harness-integration.md` — boundary and handoff between engineering workflow and Pi harness work.
 - `references/autonomous-execution.md` — approval envelope, stop conditions, batched questions, terse reporting.
 - `references/completion-evidence.md` — acceptance-to-evidence completion contract.
+- `references/delegation-policy.md` — normative subagent routing, launch, control, fidelity, and claim-verification contract.
 - `references/legacy-refactor.md` — brownfield safety: characterization/golden tests to pin current behavior before refactoring untested code.
 - `references/research.md` — source-backed research flow using `pi-web-access` and `researcher`.
 - `references/artifact-lifecycle.md` — lifecycle classes (plan/report/spec/ADR), physical separation of authoritative vs disposable files, and anti-drift rules.

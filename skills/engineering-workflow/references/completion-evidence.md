@@ -1,6 +1,6 @@
 # Completion Evidence
 
-A task is complete only when requested behavior maps to evidence.
+A task is complete only when requested behavior maps to evidence. When any evidence comes from a delegation, apply `delegation-policy.md` as the normative evidence ranking, C1–C7, claim gate, and fan-in record; this file does not redefine those rules.
 
 ## Required record
 
@@ -11,6 +11,8 @@ Acceptance:
 - <criterion> → <test, command, or manual evidence>
 Checks: <command> — pass|fail
 Review: <independent or structured self-review result>
+Delegation evidence: not-applicable | <attribution, routing, C1–C7, acceptance projections>
+Claims checked: not-applicable | <ids, verdicts, parent-observed evidence>
 Unverified: none | <explicit gap>
 Residual risk: none | <risk>
 Git: <status; proposed/made commit>
@@ -23,4 +25,4 @@ Git: <status; proposed/made commit>
 - Review does not replace validation; validation does not replace review.
 - If an acceptance criterion lacks evidence, list it under `Unverified`.
 - Keep happy-path output terse; expand only exceptions.
-- Worker/subagent claims are intermediate until the parent verifies evidence.
+- Worker/subagent claims remain intermediate until the parent applies `delegation-policy.md`; no action-driving unchecked claim may support completion.

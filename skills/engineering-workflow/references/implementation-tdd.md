@@ -10,7 +10,7 @@ Before editing:
 - Identify affected files, repository/workspace root, and test surfaces from repository evidence.
 - In a monorepo, bind the slice to one declared working directory; use ticket-level validation there before root-wide checks.
 - If ambiguity blocks safe execution, use `scout`, continue independent work, then ask one batched question set.
-- Follow `autonomous-execution.md` and `completion-evidence.md`.
+- Follow `autonomous-execution.md` and `completion-evidence.md`; if the slice delegates, also follow the normative `delegation-policy.md`.
 
 ## Seams — where tests go
 
@@ -56,15 +56,7 @@ Use repository conventions from `AGENTS.md`, `CONTRIBUTING.md`, README, workspac
 
 ## Subagents
 
-Useful patterns:
-
-- Use fresh `scout`/`context-builder` before touching unfamiliar code.
-- Use `planner` for large or risky changes.
-- Launch one async, normally forked `worker` only after plan/spec approval; the parent must not edit the same worktree concurrently.
-- After the worker handoff, launch async fresh-context reviewers for Standards and Spec/validation.
-- Preserve reviewer reports separately, then let the parent synthesize fixes; use one writer for the fix pass.
-- Use forked advisory `oracle` for risky architecture decisions or context drift.
-- Children escalate unapproved decisions through supervisor/intercom instead of guessing.
+Every launch follows `delegation-policy.md`; do not invent local context, acceptance, routing, budget, or evidence defaults here. Use scouts/context-builders for unfamiliar code, a planner for large or risky approved work, one fresh async writer with the active-tree lease, then fresh review after a stable handoff. The parent verifies evidence, synthesizes fixes through one writer, and resolves or escalates unapproved decisions.
 
 ## Constraints
 

@@ -5,7 +5,7 @@ description: Autonomously implement a pre-approved batch of ready tickets with p
 
 # Batch Implementation Runner
 
-Drive an approved ticket batch to completion without asking between tickets. Calling `/implement-all` pre-approves every runnable ticket in scope. Follow `/skill:engineering-workflow` references `autonomous-execution.md` and `completion-evidence.md`. The packaged `ticket-runner` owns durable state, ordering, retry caps, and guarded continuation; the parent owns implementation and escalation.
+Drive an approved ticket batch to completion without asking between tickets. Calling `/implement-all` pre-approves every runnable ticket in scope. Follow `/skill:engineering-workflow` references `autonomous-execution.md`, `completion-evidence.md`, and the normative `../engineering-workflow/references/delegation-policy.md` for every subagent call. The packaged `ticket-runner` owns durable state, ordering, retry caps, and guarded continuation; the parent owns implementation and escalation.
 
 ## Preconditions
 
@@ -20,9 +20,9 @@ Repeat until `batch_next` reports the batch is not actionable:
 1. Call `batch_next`. It returns one ticket (marked in progress) with its acceptance criteria and validation, or a stop reason.
 2. Implement that ticket in small vertical slices. Follow `/skill:engineering-workflow` implement discipline: prefer a failing test first when feasible, minimal change, focused checks.
 3. Validate using the ticket's Validation commands (and repo `test:harness`/`build` when relevant). The child subagent shell may be unavailable; run validation from the parent when needed.
-4. Review before completing: when `pi-subagents` is available, run an async fresh-context, review-only reviewer for spec compliance, validation evidence, and code quality via `pi-subagents` (`agent="reviewer"`, `context="fresh"`, `output=false`, a bounded `turnBudget`; omit `acceptance` and use package inference). Preserve its evidence, synthesize findings in the parent, and apply only fixes within the ticket's scope. If the fix is substantial, run one focused re-review. If `pi-subagents` is unavailable or the per-session budget is exhausted (spawn limit reached), fall back to a **structured self-review** (see Environment fallbacks) — do not skip review.
-5. Call `batch_report` with the outcome and an evidence note containing validation commands/results, reviewer or fallback result, fixes applied, and residual risks:
-   - `completed` — acceptance criteria met, validation passed, and review has no unresolved in-scope blocker.
+4. Review before completing: when `pi-subagents` is available, run an async fresh-context, review-only reviewer for spec compliance, validation evidence, and code quality; serialize it unless its runtime tools satisfy the policy's sealed-reader definition. The launch must use the ticket's attribution marker, a parent-known falsifiable bar, contract v1 with explicit minimal checked acceptance, and the budgets/report shape selected by `../engineering-workflow/references/delegation-policy.md`; never rely on package inference. Preserve its evidence, parent-verify load-bearing findings, and apply only fixes within the ticket's scope. If the fix is substantial, run one focused re-review. If `pi-subagents` is unavailable or the per-session budget is exhausted (spawn limit reached), fall back to a **structured self-review** (see Environment fallbacks) — do not skip review.
+5. Call `batch_report` with the outcome and an evidence note containing validation commands/results, reviewer or fallback result, the policy's C1–C7 and claim verdicts, fixes applied, and residual risks:
+   - `completed` — acceptance criteria met, validation passed, review has no unresolved in-scope blocker, and no action-driving claim is unchecked or unverifiable.
    - `retry` — a fixable failure; the extension re-queues until the retry cap, then fails.
    - `failed` — unrecoverable within scope after retries.
    - `blocked` — external/environment/dependency blocker.

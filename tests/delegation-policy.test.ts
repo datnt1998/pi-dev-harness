@@ -42,3 +42,21 @@ test("delegation policy uses portable model-tier archetypes rather than vendor r
   }
   assert.doesNotMatch(policy, /\b(?:opus|qwen|gpt|claude|anthropic|openai|alibaba)\b/i);
 });
+
+test("delegation callers point to the normative policy instead of relying on inference", () => {
+  for (const path of [
+    "skills/engineering-workflow/SKILL.md",
+    "skills/engineering-workflow/references/implementation-tdd.md",
+    "skills/engineering-workflow/references/completion-evidence.md",
+    "skills/engineering-workflow/references/code-review.md",
+    "skills/batch-implementation/SKILL.md",
+    "skills/pi-harness/references/engineering-workflow-integration.md",
+  ]) assert.match(text(path), /delegation-policy\.md/, path);
+
+  const callers = [
+    text("skills/engineering-workflow/SKILL.md"),
+    text("skills/batch-implementation/SKILL.md"),
+    text("skills/pi-harness/references/engineering-workflow-integration.md"),
+  ].join("\n");
+  assert.doesNotMatch(callers, /omit `acceptance`|use package inference|normally forked/i);
+});

@@ -1,6 +1,6 @@
 # Two-Axis Code Review
 
-Use this reference when reviewing a branch, PR, WIP diff, or completed implementation.
+Use this reference when reviewing a branch, PR, WIP diff, or completed implementation. Every reviewer delegation follows the normative launch, acceptance, claim, and evidence rules in `delegation-policy.md`.
 
 ## Fixed Point
 
@@ -68,12 +68,12 @@ Find:
 
 ## Parallel Subagent Pattern
 
-When `pi-subagents` is available, launch async fresh-context, review-only reviewers:
+When `pi-subagents` is available, launch async fresh-context, review-only reviewers under `delegation-policy.md`:
 
 - reviewer 1: Standards axis
 - reviewer 2: Spec axis, including acceptance criteria and validation evidence
 
-Reviewers inspect the actual diff and source files, cite file/line evidence, and do not edit project files. Keep their reports and severity judgments separate; do not collapse or rerank findings across axes.
+Reviewers inspect the actual diff and source files, cite file/line evidence, and do not edit project files. Their actionable findings use the policy's claims table and replay/check convention. The parent verifies each load-bearing finding before applying a fix. Keep reports and severity judgments separate; do not collapse or rerank findings across axes.
 
 As part of the Spec axis, flag artifact-lifecycle drift: a living spec or context doc that no longer matches the changed code, a plan/report left in an authoritative path, or a decision that should have moved into an ADR (`/skill:repo-hygiene`). Treat a stale authoritative-looking doc as a real finding, not cosmetic.
 

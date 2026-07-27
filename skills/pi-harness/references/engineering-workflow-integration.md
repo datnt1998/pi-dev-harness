@@ -69,16 +69,9 @@ For OpenAI Codex subscription, project overrides can use:
 
 ## Subagent Orchestration Contract
 
-A coding harness should make these defaults explicit in an on-demand workflow skill or reference rather than duplicating the full package manual in always-loaded instructions:
+A coding harness should point to `../../engineering-workflow/references/delegation-policy.md` as its single normative source for briefs, routing tiers, fresh/fork choice, explicit acceptance, attribution, concurrency, control, fidelity, and claim verification. Do not copy the policy into always-loaded instructions or substitute role-name/package inference.
 
-- parent owns delegation, synthesis, decisions, and final acceptance;
-- async by default, followed by `wait()` when the result is required;
-- one writer per active worktree; parallelize read-only work unless writers use isolated worktrees;
-- forked `worker`/`oracle` when inherited context matters, fresh reviewers for independent checks;
-- validation contract before implementation;
-- worker handoff → fresh review → parent synthesis → one fix writer → focused re-review when substantial;
-- children escalate unapproved decisions through supervisor/intercom rather than guessing;
-- acceptance levels match the run: package inference for ordinary review-only tasks, evidence gates for writer workflows.
+The surrounding workflow still owns the producer/reviewer sequence: validation contract before implementation; stable writer handoff; fresh independent review; parent evidence verification and synthesis; one fix writer; focused re-review when substantial; escalation instead of guessed decisions.
 
 ## Harness Audit Questions
 
