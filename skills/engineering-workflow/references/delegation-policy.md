@@ -23,7 +23,7 @@ Before every non-trivial delegation, the parent must:
 1. identify the work unit and add the attribution marker;
 2. classify whether the task contains important reasoning under T4;
 3. select fresh or forked context through the three context gates;
-4. select acceptance explicitly from the delegation archetype;
+4. select acceptance explicitly from the delegation shape;
 5. establish the writer lease, dependency edges, and concurrency allowance;
 6. choose reader budgets or mutation milestones and control notices;
 7. write the brief and its parent-known falsifiable bar;
@@ -54,7 +54,7 @@ Do not inline readable file bodies, rediscoverable repository conventions, narra
 
 These are starting bands, excluding runtime-injected contracts:
 
-| archetype | target authored tokens |
+| delegation shape | target authored tokens |
 |---|---:|
 | implementation worker | 400–900 |
 | reviewer | 300–700 |
@@ -91,7 +91,7 @@ Fresh context is the default. Fork only when all three gates pass and the needed
 2. **Signed-thinking gate.** If the parent transcript contains signed hidden reasoning and any child candidate, including fallbacks or an unresolved id, may force forked thinking off, use fresh context unless intentional no-thinking history inspection was predeclared.
 3. **Transcript-tax gate.** Fork input grows with the parent transcript. Prefer a filtered written brief in a mature session; fork only when rejected approaches, user preferences, or discussion history would be longer or less faithful to restate.
 
-Per-archetype defaults:
+Per-work-shape defaults:
 
 | work | default | fork exception |
 |---|---|---|
@@ -103,11 +103,11 @@ Per-archetype defaults:
 
 Never place a thinking-sensitive fallback on a fork-default route. Unresolvable candidates fail closed. An intentional thinking-off history audit cannot serve as acceptance, arbitration, emergency authorization, or routing-window evidence.
 
-## 6. Explicit acceptance by archetype
+## 6. Explicit acceptance by delegation shape
 
 Use `agentContract: { version: 1 }`. Select acceptance at every task/step from the work shape; never rely on package inference or `auto`. Criteria and evidence may only mirror obligations already in the brief.
 
-| delegation archetype | explicit policy | required shape |
+| delegation shape | explicit policy | required shape |
 |---|---|---|
 | exact probe / liveness check | reason-bearing `none` | parent validates exact response/process behavior |
 | trivial lookup or advisory question | reason-bearing `none` | no completion claim; action-changing facts still enter the claim gate |

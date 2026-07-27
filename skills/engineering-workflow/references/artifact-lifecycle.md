@@ -27,7 +27,9 @@ Route disposable and working artifacts into a scratch/plans/specs area that is
 gitignored and excluded from the default grep path (e.g. `.scratch/`,
 `docs/plans/`, and `docs/specs/` when specs are local-only). This physically
 separates what the agent should read (authoritative) from what it should not
-(dead or in-progress).
+(dead or in-progress). Exception: an explicitly requested cross-session plan may
+be tracked when a contract test requires it; the plan must name its deletion
+trigger, and the plan plus its contract test are deleted with the final slice.
 
 ## Rules of thumb
 
