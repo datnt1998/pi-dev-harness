@@ -37,8 +37,8 @@ Ask only blocking questions. One numbered batch; each item includes:
 
 ## Reporting
 
-Happy path: shortest useful form. Prefer:
+Final user-facing prose follows `response-shape.md`, the single normative shape contract; this section fixes only the autonomous status line. Happy path, shortest useful form:
 
 `✓ <scope> · tests/build/review pass · files <N> · risk none`
 
-Fragments are acceptable. Omit narration, transcript, repeated ticket summaries, and obvious next steps. Expand only for blockers, decisions, residual risk, failed checks, unverified behavior, or requested detail.
+Fragments are acceptable. Recurring state stays in the TUI/status, not prose, and no user next step is invented while approved work remains. Preamble/closer, tangents, wins, failures, list completeness, and scope units all defer to `response-shape.md`.

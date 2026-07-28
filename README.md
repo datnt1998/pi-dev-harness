@@ -40,20 +40,22 @@ Keep product identity, test/build commands, release source, deploy trigger, them
 
 ## Install
 
+This package is distributed by git tag; there is no npm publish. The current release tag is `v0.7.0`.
+
 ```bash
 # User-scope local development: all projects use this checkout.
 pi install /absolute/path/to/pi-dev-harness
 
-# Published, exact version (reproducible):
-pi install npm:pi-dev-harness@0.5.0
+# Pinned git tag, user scope (reproducible):
+pi install git:github.com/datnt1998/pi-dev-harness@v0.7.0
 
-# Team/project scope after publishing:
-pi install -l npm:pi-dev-harness@0.5.0
+# Team/project scope:
+pi install -l git:github.com/datnt1998/pi-dev-harness@v0.7.0
 ```
 
 Then `/reload`.
 
-Local-path installs follow the checkout immediately after `/reload`; pin that checkout to a known commit/tag for reproducible use. Exact npm specs are pinned. Upgrade/rollback explicitly with `pi install npm:pi-dev-harness@<version>` (add `-l` for project scope); inspect source/diff and rerun smoke before changing versions.
+Local-path installs follow the checkout immediately after `/reload`; pin that checkout to a known commit/tag for reproducible use. Git `@ref` values are pinned tags or commits, and pinned packages are skipped by `pi update`, so move a package to a new release explicitly with `pi install git:github.com/datnt1998/pi-dev-harness@<tag>` (add `-l` for project scope); inspect source/diff and rerun smoke before changing versions.
 
 ## Set up a new project
 
@@ -119,6 +121,26 @@ npm run smoke:packed
 ```
 
 The installed smoke loads Pi twice: package-only in a temporary unrelated project, then integrated with current user packages. The packed smoke additionally packs, installs, and loads the actual tarball to verify published-file closure. Both verify extensions, commands, tools, prompts, skills, diagnostics, and conflicts. Run a final smoke in the real consumer after overlay changes. Expected tests cover ticket readiness/state, continuation coordination, safe-ops policy, package integrity, and setup portability.
+
+## Response-quality evals
+
+`evals/response-quality/` ships a blind, paired judge-and-score harness for user-facing response quality: 16 harness-specific cases (no trivia, no answer-leaking prompts), a weighted rubric (correctness 35 / autonomy 25 / actionability 20 / safety 10 / concision 10), and a lexicographic release gate: zero blockers; a machine-evidence gate for oracle cases; candidate correctness, safety, and autonomy may not regress at all; weighted score must strictly improve; mean assistant tokens may grow at most 10%. `plan` writes a content-hashed manifest (exact case/trial/condition rows including audit rows, per-case oracles, catalog/rubric digests); `blind` and `score` require it and enforce an exact bijection among manifest, responses, key, and judgments. Provenance splits honestly: a shared `environment_hash` (provider, model, effective reasoning level, runner/CLI version, isolated config) must match across conditions, while package treatment provenance (ref, commit SHA, package content digest) must differ — equal package digests are a structural error, not a warning.
+
+`scripts/response-evals.mjs` provides `validate`, `plan`, `blind`, and `score` only. It never calls a provider and ships no runner: response rows and recorded machine evidence are produced through the actual packaged activation path (disposable tool-enabled repos, pinned provider/model/reasoning/CLI/package, isolated Pi home, quota preflight, public audit cases) documented in `evals/response-quality/README.md`, judged blind against cryptographically random, shuffled sample ids, then gated by `score` (exit 0 pass, 1 gate fail, 2 structural error — always machine-readable JSON, for every command). The release path is pinned to the packaged full catalog and rubric: a subset or custom catalog cannot produce a releasable pass. `score` requires the judged samples file (each row digest-bound, rebound to the key and recorded responses) and a judge-provenance record (provider/model/reasoning/runner/version, prompt digest, rubric digest) recorded in the summary. Cases that claim observable behavior declare a small execution oracle (expected/forbidden changed files, forbidden-call patterns matched against recorded commands, gate command) verified from recorded evidence — candidate oracle failures gate the release, baseline oracle results are comparison data; cases without an oracle are prose-only, and the score summary reports both counts — prose scores are never claimed as verified behavior. The treatment is proven active, not merely installed: each condition copies its packaged `templates/APPEND_SYSTEM.md` into the disposable consumer's `.pi/APPEND_SYSTEM.md`, reloads, verifies byte equality, and records an `activation_digest` that `score` requires to differ across conditions (package install alone cannot write `.pi/APPEND_SYSTEM.md`, so it does not activate the always-loaded overlay). Release status: the runtime overlay in `templates/` is a **candidate treatment** and must not be released (tagged/published) until a real paired baseline-vs-candidate run of this evaluation has passed `score` end-to-end; no such run exists yet.
+
+```bash
+npm run evals:validate
+npm run evals:plan
+```
+
+## Acknowledgements
+
+Two pieces of this harness are adapted from [ayghri/i-have-adhd](https://github.com/ayghri/i-have-adhd) at commit [c784dcb](https://github.com/ayghri/i-have-adhd/commit/c784dcb56b07c8c103323f308b25f7b055008baa) (MIT licensed):
+
+- the user-facing response-shape contract (`skills/engineering-workflow/references/response-shape.md`) — the prose-shape rules (answer-first, no preamble/closer, every exception preserved), reworded and re-grounded as a Pi-native, evidence-driven contract;
+- the response-quality evaluation design (`evals/response-quality/`) — the weighted 35/25/20/10/10 rubric, blocker veto, blind paired judging, and the `cases.jsonl`/`rubric.md` layout.
+
+The upstream skill shapes output for a reader with ADHD; this harness deliberately drops the upstream list cap, mandatory wall-clock estimates, per-turn prose state recap, the Python subprocess runner, trivia cases, regression tolerance, and any medical framing. Credit stays here; the adapted contracts stand on their own.
 
 ## License
 

@@ -181,7 +181,8 @@ Load only when needed:
 - `references/legacy-refactor.md` — brownfield safety: characterization/golden tests to pin current behavior before refactoring untested code.
 - `references/research.md` — source-backed research flow using `pi-web-access` and `researcher`.
 - `references/artifact-lifecycle.md` — lifecycle classes (plan/report/spec/ADR), physical separation of authoritative vs disposable files, and anti-drift rules.
+- `references/response-shape.md` — the single normative source for final user-facing prose shape; governs only the prose wrapper, never tool payloads, evidence records, commits, tickets/specs/ADRs, handoff structure, subagent briefs, or exhaustive findings.
 
 ## Done Criteria
 
-For engineering tasks, follow `references/completion-evidence.md`. Default to one terse status line; expand only failures, blockers, decisions, risks, or unverified behavior.
+For engineering tasks, follow `references/completion-evidence.md`. Shape final user-facing prose per `references/response-shape.md`: answer/result/blocker/decision first, no filler preamble or closer, recurring state in the TUI/status, and every blocker/failure/finding/unverified criterion preserved (ranked and grouped, never capped).

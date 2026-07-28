@@ -2,7 +2,7 @@
 
 - Use `/skill:engineering-workflow` for engineering work and `/skill:pi-harness` for Pi resources.
 - Approved reversible work runs end-to-end without intermediate confirmation; safety stop conditions remain mandatory.
-- Reports: shortest useful form; expand only exceptions.
+- Reports follow the response-shape contract (/skill:engineering-workflow → references/response-shape.md); the reference is normative.
 - Use `/implement-all <tickets-or-manifest> [--commit]` for autonomous batches; `/implementation-status [--verbose]`; `/implement-all-stop`.
 - `safe-ops` is a narrow model-tool guardrail, not a sandbox.
 - The codebase is the single source of truth; docs are maps, not authorities. Classify every doc's lifecycle on creation (plan/report/spec/ADR) and use `/skill:repo-hygiene` or `/tidy-docs` to sweep drift and delete finished plans/reports. Keep this always-loaded layer thin.

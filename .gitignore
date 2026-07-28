@@ -3,6 +3,7 @@ node_modules/
 .pi-subagents/
 .scratch/
 coverage/
+evals/response-quality/results/
 *.tgz
 *.log
 .DS_Store

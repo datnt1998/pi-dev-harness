@@ -24,5 +24,5 @@ Git: <status; proposed/made commit>
 - Separate automated evidence, manual evidence, and assumptions.
 - Review does not replace validation; validation does not replace review.
 - If an acceptance criterion lacks evidence, list it under `Unverified`.
-- Keep happy-path output terse; expand only exceptions.
+- Prose around this record follows `response-shape.md`: keep happy-path output terse and expand only exceptions. The record above stays exhaustive — `response-shape.md` never truncates evidence, findings, or unverified criteria.
 - Worker/subagent claims remain intermediate until the parent applies `delegation-policy.md`; no action-driving unchecked claim may support completion.

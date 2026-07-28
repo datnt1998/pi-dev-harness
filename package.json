@@ -21,12 +21,16 @@
     "prompts/**/*",
     "templates/**/*",
     "scripts/**/*",
+    "evals/response-quality/*.md",
+    "evals/response-quality/*.jsonl",
     "README.md",
     "LICENSE"
   ],
   "scripts": {
     "test": "node --experimental-strip-types --test tests/*.test.ts",
     "pack:check": "npm pack --dry-run",
+    "evals:validate": "node scripts/response-evals.mjs validate",
+    "evals:plan": "node scripts/response-evals.mjs plan",
     "smoke:installed": "node scripts/sdk-smoke.mjs",
     "smoke:packed": "node scripts/packed-smoke.mjs"
   },
