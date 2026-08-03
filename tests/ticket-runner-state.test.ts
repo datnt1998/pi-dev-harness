@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  applyEvidencedOutcome,
   applyOutcome,
   createRunState,
   isBatchRunState,
@@ -8,6 +9,7 @@ import {
   nextActionableTicket,
   propagateSkips,
   recordContinuation,
+  recoveryGuidance,
   shouldContinue,
   startTicket,
   stopReason,
@@ -29,6 +31,36 @@ function baseState(commit = false) {
     now: 1,
   });
 }
+
+function report(outcome: "completed" | "retry" | "failed" | "blocked" = "completed") {
+  const validationOutcome = outcome === "completed" ? "passed" : "failed";
+  return {
+    protocolVersion: 1,
+    workUnit: { source: "tickets.md", sourceFingerprint: "fp", ticketId: "T1", purpose: "state gate", attempt: 1 },
+    runs: [{ role: "producer", actor: "writer", runId: "run-1", contextMode: "fresh", acceptanceMode: "checked", provider: { provider: "producer", fallback: false } }],
+    writerLease: { owner: "writer", phase: "closed", allowedPaths: ["lib/x.ts"], openedAt: "2026-01-01", closedAt: "2026-01-01" },
+    implementation: { changedPaths: ["lib/x.ts"], fingerprint: "implementation" },
+    producerObservations: [{ summary: "observed failure", locators: ["log:1"], replayCommands: ["node --test"] }],
+    parentValidation: [{ command: "node --test", outcome: validationOutcome, locator: "log:2", observedFingerprint: "implementation" }],
+    reviews: [
+      { axis: "standards", run: { role: "standards-reviewer", actor: "standards", runId: "standards-1", contextMode: "fresh", acceptanceMode: "reviewed", provider: { provider: "standards", fallback: false } }, reviewedFingerprint: "implementation", verdict: "no-findings", findings: [] },
+      { axis: "spec", run: { role: "spec-reviewer", actor: "spec", runId: "spec-1", contextMode: "fresh", acceptanceMode: "reviewed", provider: { provider: "spec", fallback: false } }, reviewedFingerprint: "implementation", verdict: "no-findings", findings: [] },
+    ],
+    dispositions: [], fixAndRereview: { round: 0, fixApplied: false },
+    completionFidelity: { criteria: { C1: "verified", C2: "verified", C3: "verified", C4: "verified", C5: "verified", C6: "verified", C7: "verified" }, claims: [{ claim: "test", locator: "log:2", verifiedBy: "parent" }] },
+    diversity: { achievedIndependence: "provider-distinct", degraded: false }, residualRisks: outcome === "completed" ? [] : ["safe to retry after changing implementation"], requestedOutcome: outcome,
+    parentGate: { actor: "parent", role: "parent", action: outcome === "completed" ? "accepted" : "rejected", observedFingerprint: "implementation", evidenceLocator: "log:3" },
+  } as any;
+}
+
+test("createRunState creates deterministic complete order from partial duplicate request", () => {
+  const state = createRunState({
+    batchId: "b", source: "s", fingerprint: "f", order: ["T2", "T2", "unknown"],
+    tickets: [{ id: "T1", dependencies: [] }, { id: "T2", dependencies: [] }, { id: "T3", dependencies: [] }],
+  });
+  assert.deepEqual(state.order, ["T2", "T1", "T3"]);
+  assert.equal(isBatchRunState(state), true);
+});
 
 test("createRunState drops self and unknown dependencies and defaults", () => {
   const state = createRunState({
@@ -53,6 +85,15 @@ test("persisted state validation rejects malformed entries", () => {
   assert.equal(isBatchRunState({ ...baseState(), tickets: [{ id: "T1", dependencies: ["unknown"], status: "queued", attempts: 0 }] }), false);
   assert.equal(isBatchRunState({ ...baseState(), tickets: [{ id: "T1", status: "bogus" }] }), false);
   assert.equal(isBatchRunState(undefined), false);
+
+  const evidenced = baseState(); startTicket(evidenced, "T1");
+  assert.equal(applyEvidencedOutcome(evidenced, "T1", report(), "completed").ok, true);
+  const corrupt = structuredClone(evidenced) as any;
+  corrupt.tickets[0].evidence.acceptedReports[0].report.protocolVersion = 2;
+  assert.equal(isBatchRunState(corrupt), false);
+  const mismatched = structuredClone(evidenced) as any;
+  mismatched.tickets[0].evidence.acceptedReports[0].outcome = "failed";
+  assert.equal(isBatchRunState(mismatched), false);
 });
 
 test("outcomes apply only to the in-progress ticket", () => {
@@ -62,6 +103,146 @@ test("outcomes apply only to the in-progress ticket", () => {
   assert.equal(applyOutcome(state, "T2", "completed"), undefined);
   assert.equal(applyOutcome(state, "T1", "completed")?.status, "completed");
   assert.equal(applyOutcome(state, "T1", "failed"), undefined);
+});
+
+test("evidenced outcomes reject malformed and incomplete reports without mutation", () => {
+  for (const outcome of ["completed", "retry", "failed", "blocked"] as const) {
+    const state = baseState(); startTicket(state, "T1");
+    const before = structuredClone(state);
+    assert.equal(applyEvidencedOutcome(state, "T1", { prose: "done" }, outcome).ok, false);
+    assert.deepEqual(state, before);
+    const incomplete = report(outcome);
+    if (outcome === "completed") incomplete.parentValidation = [];
+    if (outcome === "retry") { incomplete.residualRisks = []; incomplete.parentValidation[0].outcome = "passed"; }
+    if (outcome === "failed" || outcome === "blocked") incomplete.residualRisks = [];
+    assert.equal(applyEvidencedOutcome(state, "T1", incomplete, outcome).ok, false);
+    assert.deepEqual(state, before);
+  }
+});
+
+test("unknown version and mismatched work unit leave state unchanged", () => {
+  const state = baseState(); startTicket(state, "T1"); const before = structuredClone(state);
+  const unknown = report(); unknown.protocolVersion = 2;
+  assert.equal(applyEvidencedOutcome(state, "T1", unknown, "completed").ok, false);
+  assert.deepEqual(state, before);
+  const wrongTicket = report(); wrongTicket.workUnit.ticketId = "T2";
+  assert.equal(applyEvidencedOutcome(state, "T1", wrongTicket, "completed").ok, false);
+  assert.deepEqual(state, before);
+});
+
+test("retry, failed, and blocked require final-fingerprint parent rejection and failed-stage evidence", () => {
+  for (const outcome of ["retry", "failed", "blocked"] as const) {
+    for (const mutate of [
+      (value: any) => { value.parentGate.action = "accepted"; },
+      (value: any) => { value.parentGate.observedFingerprint = "stale"; },
+      (value: any) => { value.parentValidation[0].observedFingerprint = "stale"; },
+      (value: any) => { value.producerObservations[0].summary = ""; },
+      (value: any) => { value.producerObservations[0].locators = []; },
+      (value: any) => { value.producerObservations[0].replayCommands = []; },
+      ...(outcome === "retry" ? [(value: any) => { value.residualRisks = []; }, (value: any) => { value.implementation.changedPaths = []; }] : []),
+      ...((outcome === "failed" || outcome === "blocked") ? [(value: any) => { value.residualRisks = []; }] : []),
+    ]) {
+      const state = baseState(); startTicket(state, "T1"); const before = structuredClone(state);
+      const invalid = report(outcome); mutate(invalid);
+      assert.equal(applyEvidencedOutcome(state, "T1", invalid, outcome).ok, false);
+      assert.deepEqual(state, before);
+    }
+  }
+});
+
+test("valid retry, failed, and blocked reports transition only after their evidence gate", () => {
+  for (const outcome of ["retry", "failed", "blocked"] as const) {
+    const state = baseState(); startTicket(state, "T1");
+    assert.equal(applyEvidencedOutcome(state, "T1", report(outcome), outcome).ok, true);
+    assert.equal(state.tickets[0].status, outcome === "retry" ? "queued" : outcome);
+  }
+});
+
+test("evidenced completion transitions only its matching active ticket and derives note", () => {
+  const state = baseState(); startTicket(state, "T1");
+  const accepted = applyEvidencedOutcome(state, "T1", report(), "completed");
+  assert.equal(accepted.ok, true);
+  assert.equal(state.tickets[0].status, "completed");
+  assert.match(state.tickets[0].note!, /Evidence accepted/);
+  assert.equal(state.tickets[0].evidence?.acceptedReports.length, 1);
+});
+
+test("completion rejects stale fingerprints and unusable review verdicts without mutation", () => {
+  for (const mutate of [
+    (value: any) => { value.reviews[0].reviewedFingerprint = "stale"; },
+    (value: any) => { value.parentValidation[0].observedFingerprint = "stale"; },
+    (value: any) => { value.parentGate.observedFingerprint = "stale"; },
+    (value: any) => { value.reviews[0].verdict = "unable-to-review"; },
+    (value: any) => { value.reviews[0].verdict = "findings"; value.reviews[0].findings = []; },
+    (value: any) => { value.reviews[0].verdict = "no-findings"; value.reviews[0].findings = [{ id: "F1", severity: "high", summary: "contradiction", locator: "log:4", replay: "node --test" }]; },
+  ]) {
+    const state = baseState(); startTicket(state, "T1"); const before = structuredClone(state);
+    const invalid = report(); mutate(invalid);
+    assert.equal(applyEvidencedOutcome(state, "T1", invalid, "completed").ok, false);
+    assert.deepEqual(state, before);
+  }
+});
+
+test("state-level needs_decision remains fail-closed until T3", () => {
+  const state = baseState(); startTicket(state, "T1"); const before = structuredClone(state);
+  const decision = report() as any; decision.requestedOutcome = "needs_decision";
+  decision.diversity = { achievedIndependence: "provider-distinct", degraded: false };
+  const result = applyEvidencedOutcome(state, "T1", decision, "needs_decision");
+  assert.equal(result.ok, false);
+  if (!result.ok) assert.equal(result.error.code, "needs-decision-requires-t3");
+  assert.deepEqual(state, before);
+});
+
+test("degraded completion derives warning, actual topology, guidance, and continue acknowledgment", () => {
+  const state = baseState(); startTicket(state, "T1");
+  const degraded = report();
+  degraded.runs[0].provider.provider = "shared";
+  degraded.reviews[0].run.provider.provider = "shared";
+  degraded.diversity = {
+    achievedIndependence: "provider-overlap", degraded: true,
+    warning: { targetTopology: "three providers", configuredProviders: ["shared", "spec"], actualProviders: ["shared", "shared", "spec"], missingOrOverlapping: "producer overlaps Standards", qualityConsequence: "correlated blind spots", configurationGuidance: "configure distinct providers" },
+    acknowledgment: { actor: "operator", at: "2026-01-01", decision: "continue", reason: "accepted degradation" },
+  };
+  assert.equal(applyEvidencedOutcome(state, "T1", degraded, "completed").ok, true);
+  assert.match(state.tickets[0].note!, /DEGRADED provider-overlap/);
+  assert.match(state.tickets[0].note!, /target three providers/);
+  assert.match(state.tickets[0].note!, /configured shared, spec/);
+  assert.match(state.tickets[0].note!, /producer=shared \(fallback no; thinking unknown\)/);
+  assert.match(state.tickets[0].note!, /Standards=shared \(fallback no; thinking unknown\)/);
+  assert.match(state.tickets[0].note!, /Spec=spec \(fallback no; thinking unknown\)/);
+  assert.match(state.tickets[0].note!, /producer overlaps Standards/);
+  assert.match(state.tickets[0].note!, /correlated blind spots/);
+  assert.match(state.tickets[0].note!, /configure distinct providers/);
+  assert.match(state.tickets[0].note!, /operator continue/);
+  assert.match(state.tickets[0].note!, /because accepted degradation/);
+});
+
+test("accepted evidence is cloned and retains pending retry evidence after a later terminal report", () => {
+  const state = baseState(); startTicket(state, "T1");
+  const retry = report("retry");
+  assert.equal(applyEvidencedOutcome(state, "T1", retry, "retry").ok, true);
+  retry.residualRisks[0] = "mutated outside state";
+  assert.notEqual(state.tickets[0].evidence?.pendingEvidence?.residualRisks[0], "mutated outside state");
+  startTicket(state, "T1");
+  const failed = report("failed"); failed.workUnit.attempt = 2;
+  assert.equal(applyEvidencedOutcome(state, "T1", failed, "failed").ok, true);
+  assert.equal(state.tickets[0].evidence?.acceptedReports.length, 2);
+  assert.equal(state.tickets[0].evidence?.pendingEvidence?.requestedOutcome, "retry");
+});
+
+test("retry preserves accepted provenance and pending evidence across reconstruction", () => {
+  const state = baseState(); startTicket(state, "T1");
+  assert.equal(applyEvidencedOutcome(state, "T1", report("retry"), "retry").ok, true);
+  assert.equal(state.tickets[0].status, "queued");
+  assert.equal(state.tickets[0].evidence?.acceptedReports.length, 1);
+  assert.ok(state.tickets[0].evidence?.pendingEvidence);
+  assert.equal(isBatchRunState(structuredClone(state)), true);
+});
+
+test("legacy state remains readable with deterministic recovery guidance", () => {
+  const state = baseState();
+  assert.equal(isBatchRunState(state), true);
+  assert.match(recoveryGuidance(state.tickets[0])!, /re-gate, revalidate, and re-review/);
 });
 
 test("actionable ticket respects dependency order", () => {

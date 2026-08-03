@@ -7,7 +7,7 @@ import { CONTINUATION_EVENT, continuationRegistry } from "../lib/continuation-ev
 import { manifestSource, parseImplementArgs } from "../lib/ticket-runner-input.ts";
 import { analyzeBatch, fingerprint, isRunnable, parseTickets } from "../lib/ticket-readiness.ts";
 import {
-  applyOutcome,
+  applyEvidencedOutcome,
   type BatchRunState,
   createRunState,
   deactivate,
@@ -15,6 +15,7 @@ import {
   isBatchRunState,
   nextActionableTicket,
   recordContinuation,
+  recoveryGuidance,
   shouldContinue,
   startTicket,
   stopReason,
@@ -23,8 +24,6 @@ import {
 
 const STATE_ENTRY = "ticket-batch-state";
 const STATUS_KEY = "ticket-batch";
-let current: BatchRunState | undefined;
-let continuationPending = false;
 
 function resolvePath(ctx: ExtensionContext, path: string): string {
   return isAbsolute(path) ? path : resolve(ctx.cwd, path);
@@ -43,35 +42,6 @@ function repoScripts(ctx: ExtensionContext): string[] {
   }
 }
 
-function persist(pi: ExtensionAPI) {
-  if (current) pi.appendEntry(STATE_ENTRY, current as unknown as Record<string, unknown>);
-}
-
-function reconstruct(ctx: ExtensionContext) {
-  current = undefined;
-  for (const entry of ctx.sessionManager.getBranch()) {
-    if (entry.type === "custom" && entry.customType === STATE_ENTRY && isBatchRunState(entry.data)) {
-      current = entry.data;
-    }
-  }
-}
-
-function setStatus(ctx: ExtensionContext) {
-  if (ctx.mode !== "tui") return;
-  if (!current || !current.active) {
-    ctx.ui.setStatus(STATUS_KEY, undefined);
-    return;
-  }
-  const s = summarize(current);
-  const done = s.completed;
-  const total = current.tickets.length;
-  const active = nextActionableTicket(current)?.id ?? "—";
-  ctx.ui.setStatus(
-    STATUS_KEY,
-    ctx.ui.theme.fg("accent", `batch ${done}/${total}`) + ctx.ui.theme.fg("dim", ` · ${active}`),
-  );
-}
-
 function statusReport(state: BatchRunState, verbose = false): string {
   const s = summarize(state);
   const summary = `batch ${state.batchId} · ${s.completed}/${state.tickets.length} done · q${s.queued}/run${s.in_progress}/fail${s.failed}/block${s.blocked}/decision${s.needs_decision}/skip${s.skipped} · stop=${stopReason(state)} · commit=${state.commit}`;
@@ -80,7 +50,7 @@ function statusReport(state: BatchRunState, verbose = false): string {
     summary,
     `source: ${state.source}`,
     `continuations ${state.continuationsUsed}/${state.maxContinuations}`,
-    ...state.tickets.map((ticket) => `  ${ticket.id} ${ticket.status}${ticket.note ? ` — ${ticket.note}` : ""}`),
+    ...state.tickets.map((ticket) => `  ${ticket.id} ${ticket.status}${ticket.note ? ` — ${ticket.note}` : ""}${recoveryGuidance(ticket) ? ` — ${recoveryGuidance(ticket)}` : ""}`),
   ].join("\n");
 }
 
@@ -102,6 +72,33 @@ function ticketRaw(ctx: ExtensionContext, state: BatchRunState, id: string): str
 }
 
 export default function (pi: ExtensionAPI) {
+  // State belongs to this extension instance; module-level state would leak
+  // batches across multiple hosts or test instances.
+  let current: BatchRunState | undefined;
+  let continuationPending = false;
+
+  function persist() {
+    if (current) pi.appendEntry(STATE_ENTRY, structuredClone(current) as unknown as Record<string, unknown>);
+  }
+
+  function reconstruct(ctx: ExtensionContext) {
+    current = undefined;
+    for (const entry of ctx.sessionManager.getBranch()) {
+      if (entry.type === "custom" && entry.customType === STATE_ENTRY && isBatchRunState(entry.data)) current = structuredClone(entry.data);
+    }
+  }
+
+  function setStatus(ctx: ExtensionContext) {
+    if (ctx.mode !== "tui") return;
+    if (!current || !current.active) {
+      ctx.ui.setStatus(STATUS_KEY, undefined);
+      return;
+    }
+    const s = summarize(current);
+    const active = nextActionableTicket(current)?.id ?? "—";
+    ctx.ui.setStatus(STATUS_KEY, ctx.ui.theme.fg("accent", `batch ${s.completed}/${current.tickets.length}`) + ctx.ui.theme.fg("dim", ` · ${active}`));
+  }
+
   pi.on("session_start", (_event, ctx) => {
     reconstruct(ctx);
     continuationPending = false;
@@ -135,7 +132,7 @@ export default function (pi: ExtensionAPI) {
       // instead of the misleading "running".
       const effectiveReason = reason === "running" ? "max_continuations" : reason;
       current.active = false;
-      persist(pi);
+      persist();
       setStatus(ctx);
       if (ctx.mode === "tui") {
         ctx.ui.notify(`Ticket batch stopped: ${effectiveReason}. Run /implementation-status.`, effectiveReason === "completed" ? "info" : "warning");
@@ -144,7 +141,7 @@ export default function (pi: ExtensionAPI) {
     }
 
     recordContinuation(current);
-    persist(pi);
+    persist();
     continuationPending = true;
     // Announce the planned follow-up synchronously so same-event consumers
     // (pi-memory) defer their own work (harness:continuation:v1).
@@ -222,7 +219,7 @@ export default function (pi: ExtensionAPI) {
         tickets: runnable.map((t) => ({ id: t.id, dependencies: t.dependencies.filter((d) => runnableIds.has(d)) })),
         commit,
       });
-      persist(pi);
+      persist();
       setStatus(ctx);
       ctx.ui.notify(
         `Batch started: ${runnable.length} runnable${notRunnable.length ? ` · ${notRunnable.length} gated` : ""} · commit=${commit}.`,
@@ -263,7 +260,7 @@ export default function (pi: ExtensionAPI) {
         return;
       }
       deactivate(current);
-      persist(pi);
+      persist();
       setStatus(ctx);
       ctx.ui.notify("Ticket batch stopped.", "info");
     },
@@ -282,7 +279,7 @@ export default function (pi: ExtensionAPI) {
       }
       if (!sourceIsCurrent(ctx, current)) {
         deactivate(current, "source_changed");
-        persist(pi);
+        persist();
         setStatus(ctx);
         return { content: [{ type: "text", text: "Batch stopped: source changed; re-gate and restart." }], details: { stop: "source_changed" } };
       }
@@ -309,7 +306,7 @@ export default function (pi: ExtensionAPI) {
         };
       }
       startTicket(current, next.id);
-      persist(pi);
+      persist();
       setStatus(ctx);
       return {
         content: [
@@ -326,12 +323,12 @@ export default function (pi: ExtensionAPI) {
   pi.registerTool({
     name: "batch_report",
     label: "Batch Report Outcome",
-    description: "Report the terminal outcome of the current ticket. Use retry to re-attempt within the retry cap. Use needs_decision or blocked to escalate without guessing.",
+    description: "Report a structured completed, retry, failed, or blocked outcome for the current ticket. Use retry to re-attempt within the retry cap.",
     promptSnippet: "Report the outcome of a ticket in the active ticket batch",
     parameters: Type.Object({
       id: Type.String({ description: "Ticket id, e.g. T2" }),
-      outcome: StringEnum(["completed", "retry", "failed", "blocked", "needs_decision"] as const),
-      note: Type.Optional(Type.String({ description: "Evidence, blocker, or decision needed" })),
+      outcome: StringEnum(["completed", "retry", "failed", "blocked"] as const),
+      report: Type.Any({ description: "Required version-1 structured team-orchestration evidence envelope; prose notes cannot authorize an outcome." }),
     }),
     async execute(_id, params, _signal, _onUpdate, ctx) {
       reconstruct(ctx);
@@ -344,17 +341,18 @@ export default function (pi: ExtensionAPI) {
       }
       if (!sourceIsCurrent(ctx, current)) {
         deactivate(current, "source_changed");
-        persist(pi);
+        persist();
         setStatus(ctx);
         return { content: [{ type: "text", text: "Batch stopped: source changed; result not recorded." }], details: { stop: "source_changed" } };
       }
-      const ticket = applyOutcome(current, params.id, params.outcome, params.note);
-      if (!ticket) {
-        return { content: [{ type: "text", text: `Unknown ticket ${params.id}.` }], details: {}, };
+      const result = applyEvidencedOutcome(current, params.id, params.report, params.outcome);
+      if (!result.ok) {
+        return { content: [{ type: "text", text: `Outcome rejected: ${result.error.message}` }], details: { id: params.id, stop: "invalid_evidence", code: result.error.code } };
       }
+      const ticket = result.ticket;
       const reason = stopReason(current);
       if (reason !== "running") current.active = false;
-      persist(pi);
+      persist();
       setStatus(ctx);
       return {
         content: [{ type: "text", text: `Recorded ${params.id} → ${ticket.status}. stop=${reason}.\n\n${statusReport(current)}` }],
