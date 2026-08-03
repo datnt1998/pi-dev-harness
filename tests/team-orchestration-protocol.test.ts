@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   classifyIndependence,
+  decisionPacketEquivalenceKey,
   implementationStateFingerprint,
   isProviderIndependent,
   normalizeProviderIdentity,
@@ -145,6 +146,46 @@ test("parent actor collisions fail while parent-run provenance may share the par
   assert.equal(parseTeamOrchestrationEnvelope(degraded).ok, false);
   degraded.reviews[1].run.provider.provider = "provider-a";
   assert.equal(parseTeamOrchestrationEnvelope(degraded).ok, true);
+});
+
+test("decision packets require replayable structural evidence for all pattern kinds", () => {
+  for (const patternKind of ["code-shape", "decision-category", "combined"] as const) {
+    const input = envelope();
+    input.requestedOutcome = "needs_decision";
+    input.parentGate.action = "escalated";
+    input.decisionPacket = {
+      affectedWorkUnitIds: ["T1"], affectedTicketIds: ["T1"], affectedFiles: ["lib/example.ts"], locatorOrGlob: "lib/**/*.ts:1",
+      searchedScope: "lib", exclusions: ["node_modules"], pattern: "missing stable decision invariant", patternKind,
+      occurrences: 2, representativeLocators: ["lib/example.ts:1"], question: "Which invariant should govern this behavior?",
+      safeDefault: "Leave behavior unchanged.", consequences: "Changing it could alter callers.", replayCommand: "rg invariant lib",
+      disconfirmProcedure: "Inspect the listed locators for a counterexample.", blockedStage: "implementation", unrelatedWorkSafe: true,
+    };
+    assert.equal(parseTeamOrchestrationEnvelope(input).ok, true);
+  }
+  const missing = envelope() as any;
+  missing.requestedOutcome = "needs_decision";
+  missing.parentGate.action = "escalated";
+  assert.equal(parseTeamOrchestrationEnvelope(missing).ok, false);
+  const notCounted = envelope() as any;
+  notCounted.requestedOutcome = "needs_decision";
+  notCounted.parentGate.action = "escalated";
+  notCounted.decisionPacket = { affectedWorkUnitIds: ["T1"], affectedTicketIds: ["T1"], affectedFiles: ["lib/example.ts"], locatorOrGlob: "lib/**/*.ts:1", searchedScope: "lib", exclusions: [], pattern: "shape", patternKind: "code-shape", notCountedReason: "generated files make a reliable count unavailable", representativeLocators: ["lib/example.ts:1"], question: "Choose behavior?", safeDefault: "Do nothing.", consequences: "Callers retain current behavior.", replayCommand: "rg shape lib", disconfirmProcedure: "Inspect matches.", blockedStage: "implementation", unrelatedWorkSafe: true };
+  assert.equal(parseTeamOrchestrationEnvelope(notCounted).ok, true);
+  notCounted.decisionPacket.occurrences = 1;
+  assert.equal(parseTeamOrchestrationEnvelope(notCounted).ok, false);
+});
+
+test("decision equivalence includes the exact question but excludes aggregating evidence", () => {
+  const packet = { affectedWorkUnitIds: ["T1"], affectedTicketIds: ["T1"], affectedFiles: ["lib/x.ts"], locatorOrGlob: "lib/x.ts:1", searchedScope: "lib", exclusions: [], pattern: "missing invariant", patternKind: "code-shape" as const, occurrences: 1, representativeLocators: ["lib/x.ts:1"], question: "Which API?", safeDefault: "No change", consequences: "Compatibility", replayCommand: "rg x lib", disconfirmProcedure: "inspect", blockedStage: "implementation", unrelatedWorkSafe: true };
+  assert.equal(decisionPacketEquivalenceKey(packet), decisionPacketEquivalenceKey({ ...packet, affectedWorkUnitIds: ["T2"], affectedTicketIds: ["T2"], affectedFiles: ["tests/x.ts"], representativeLocators: ["tests/x.ts:1"], replayCommand: "rg x tests" }));
+  assert.notEqual(decisionPacketEquivalenceKey(packet), decisionPacketEquivalenceKey({ ...packet, question: "Please decide the API owner." }));
+  assert.notEqual(decisionPacketEquivalenceKey(packet), decisionPacketEquivalenceKey({ ...packet, pattern: "different missing invariant" }));
+});
+
+test("decision packets are rejected for outcomes other than needs_decision", () => {
+  const input = envelope() as any;
+  input.decisionPacket = { affectedWorkUnitIds: ["T1"], affectedTicketIds: ["T1"], affectedFiles: ["lib/x.ts"], locatorOrGlob: "lib/x.ts:1", searchedScope: "lib", exclusions: [], pattern: "shape", patternKind: "code-shape", occurrences: 1, representativeLocators: ["lib/x.ts:1"], question: "Which behavior?", safeDefault: "No change.", consequences: "Compatibility.", replayCommand: "rg shape lib", disconfirmProcedure: "Inspect matches.", blockedStage: "implementation", unrelatedWorkSafe: true };
+  assert.equal(parseTeamOrchestrationEnvelope(input).ok, false);
 });
 
 test("fingerprints are normalization and key-order stable but materially sensitive", () => {

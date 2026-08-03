@@ -32,7 +32,7 @@ function baseState(commit = false) {
   });
 }
 
-function report(outcome: "completed" | "retry" | "failed" | "blocked" = "completed") {
+function report(outcome: "completed" | "retry" | "failed" | "blocked" | "needs_decision" = "completed") {
   const validationOutcome = outcome === "completed" ? "passed" : "failed";
   return {
     protocolVersion: 1,
@@ -49,7 +49,8 @@ function report(outcome: "completed" | "retry" | "failed" | "blocked" = "complet
     dispositions: [], fixAndRereview: { round: 0, fixApplied: false },
     completionFidelity: { criteria: { C1: "verified", C2: "verified", C3: "verified", C4: "verified", C5: "verified", C6: "verified", C7: "verified" }, claims: [{ claim: "test", locator: "log:2", verifiedBy: "parent" }] },
     diversity: { achievedIndependence: "provider-distinct", degraded: false }, residualRisks: outcome === "completed" ? [] : ["safe to retry after changing implementation"], requestedOutcome: outcome,
-    parentGate: { actor: "parent", role: "parent", action: outcome === "completed" ? "accepted" : "rejected", observedFingerprint: "implementation", evidenceLocator: "log:3" },
+    ...(outcome === "needs_decision" ? { decisionPacket: { affectedWorkUnitIds: ["T1"], affectedTicketIds: ["T1"], affectedFiles: ["lib/x.ts"], locatorOrGlob: "lib/x.ts:1", searchedScope: "lib", exclusions: ["node_modules"], pattern: "missing invariant", patternKind: "decision-category", occurrences: 1, representativeLocators: ["lib/x.ts:1"], question: "Which behavior should apply?", safeDefault: "Leave the current behavior unchanged.", consequences: "Callers retain existing semantics.", replayCommand: "rg invariant lib", disconfirmProcedure: "Inspect the representative locator.", blockedStage: "implementation", unrelatedWorkSafe: true } } : {}),
+    parentGate: { actor: "parent", role: "parent", action: outcome === "completed" ? "accepted" : "escalated", observedFingerprint: "implementation", evidenceLocator: "log:3" },
   } as any;
 }
 
@@ -94,6 +95,26 @@ test("persisted state validation rejects malformed entries", () => {
   const mismatched = structuredClone(evidenced) as any;
   mismatched.tickets[0].evidence.acceptedReports[0].outcome = "failed";
   assert.equal(isBatchRunState(mismatched), false);
+
+  const indexed = baseState(); startTicket(indexed, "T1");
+  assert.equal(applyEvidencedOutcome(indexed, "T1", report("needs_decision"), "needs_decision").ok, true);
+  const hollowIndex = structuredClone(indexed) as any;
+  hollowIndex.decisionIndex = [null];
+  assert.doesNotThrow(() => isBatchRunState(hollowIndex));
+  assert.equal(isBatchRunState(hollowIndex), false);
+  const corruptIndex = structuredClone(indexed) as any;
+  corruptIndex.decisionIndex[0].packet = { question: "hollow" };
+  assert.doesNotThrow(() => isBatchRunState(corruptIndex));
+  assert.equal(isBatchRunState(corruptIndex), false);
+  const duplicateIndex = structuredClone(indexed) as any;
+  duplicateIndex.decisionIndex.push(structuredClone(duplicateIndex.decisionIndex[0]));
+  assert.equal(isBatchRunState(duplicateIndex), false);
+  const incoherentIndex = structuredClone(indexed) as any;
+  incoherentIndex.decisionIndex[0].packet.affectedTicketIds = ["unknown"];
+  assert.equal(isBatchRunState(incoherentIndex), false);
+  const stalePending = structuredClone(indexed) as any;
+  stalePending.tickets[0].evidence.pendingDecision.consequences = "stale denormalization";
+  assert.equal(isBatchRunState(stalePending), false);
 });
 
 test("outcomes apply only to the in-progress ticket", () => {
@@ -183,14 +204,111 @@ test("completion rejects stale fingerprints and unusable review verdicts without
   }
 });
 
-test("state-level needs_decision remains fail-closed until T3", () => {
+test("needs_decision rejects missing or non-replayable packets without mutation", () => {
+  for (const mutate of [
+    (value: any) => { delete value.decisionPacket; },
+    (value: any) => { value.decisionPacket.replayCommand = ""; },
+    (value: any) => { value.decisionPacket.affectedFiles = []; },
+  ]) {
+    const state = baseState(); startTicket(state, "T1"); const before = structuredClone(state);
+    const decision = report("needs_decision"); mutate(decision);
+    assert.equal(applyEvidencedOutcome(state, "T1", decision, "needs_decision").ok, false);
+    assert.deepEqual(state, before);
+  }
+});
+
+test("equivalent decisions merge evidence, persist, block dependents, and retain unrelated work", () => {
+  const state = createRunState({ batchId: "b", source: "tickets.md", fingerprint: "fp", order: ["T1", "T2", "T3"], tickets: [{ id: "T1", dependencies: [] }, { id: "T2", dependencies: ["T1"] }, { id: "T3", dependencies: [] }], now: 1 });
+  startTicket(state, "T1"); assert.equal(applyEvidencedOutcome(state, "T1", report("needs_decision"), "needs_decision").ok, true);
+  assert.equal(state.tickets.find((ticket) => ticket.id === "T2")?.status, "skipped");
+  assert.equal(nextActionableTicket(state)?.id, "T3");
+  startTicket(state, "T3"); const second = report("needs_decision");
+  second.workUnit.ticketId = "T3"; second.decisionPacket.affectedWorkUnitIds = ["T3"]; second.decisionPacket.affectedTicketIds = ["T3"]; second.decisionPacket.affectedFiles = ["tests/x.ts"]; second.decisionPacket.representativeLocators = ["tests/x.ts:2"]; second.decisionPacket.replayCommand = "rg invariant tests"; second.decisionPacket.disconfirmProcedure = "Inspect test locator.";
+  assert.equal(applyEvidencedOutcome(state, "T3", second, "needs_decision").ok, true);
+  assert.equal(state.decisionIndex?.length, 1);
+  const merged = state.decisionIndex![0].packet;
+  assert.deepEqual(merged.affectedTicketIds, ["T1", "T3"]);
+  assert.deepEqual(merged.affectedFiles, ["lib/x.ts", "tests/x.ts"]);
+  assert.match(merged.replayCommand, /rg invariant lib; then rg invariant tests/);
+  assert.equal(isBatchRunState(structuredClone(state)), true);
+  assert.match(state.tickets.find((ticket) => ticket.id === "T1")?.note!, /Which behavior should apply\?/);
+  assert.match(state.tickets.find((ticket) => ticket.id === "T1")?.note!, /Safe default:/);
+  assert.match(state.tickets.find((ticket) => ticket.id === "T1")?.note!, /Consequences:/);
+  assert.match(state.tickets.find((ticket) => ticket.id === "T1")?.note!, /Replay: rg invariant lib/);
+});
+
+test("needs_decision rejects unknown affected work units before mutation", () => {
   const state = baseState(); startTicket(state, "T1"); const before = structuredClone(state);
-  const decision = report() as any; decision.requestedOutcome = "needs_decision";
-  decision.diversity = { achievedIndependence: "provider-distinct", degraded: false };
+  const decision = report("needs_decision");
+  decision.decisionPacket.affectedWorkUnitIds.push("unknown");
+  decision.decisionPacket.affectedTicketIds.push("unknown");
   const result = applyEvidencedOutcome(state, "T1", decision, "needs_decision");
   assert.equal(result.ok, false);
-  if (!result.ok) assert.equal(result.error.code, "needs-decision-requires-t3");
   assert.deepEqual(state, before);
+});
+
+test("a packet may pre-list known affected tickets and still round-trip before their own escalation", () => {
+  const state = createRunState({ batchId: "b", source: "tickets.md", fingerprint: "fp", order: ["T1", "T2"], tickets: [{ id: "T1", dependencies: [] }, { id: "T2", dependencies: [] }], now: 1 });
+  startTicket(state, "T1");
+  const decision = report("needs_decision");
+  decision.decisionPacket.affectedWorkUnitIds = ["T1", "T2"];
+  decision.decisionPacket.affectedTicketIds = ["T1", "T2"];
+  assert.equal(applyEvidencedOutcome(state, "T1", decision, "needs_decision").ok, true);
+  assert.equal(state.tickets[1].status, "queued");
+  assert.equal(isBatchRunState(structuredClone(state)), true);
+  assert.deepEqual(state.decisionIndex?.[0].packet.affectedTicketIds, ["T1", "T2"]);
+});
+
+test("equivalent decision merge reconstructs earlier pending state without rewriting provenance", () => {
+  const state = createRunState({ batchId: "b", source: "tickets.md", fingerprint: "fp", order: ["T1", "T2", "T3"], tickets: [{ id: "T1", dependencies: [] }, { id: "T2", dependencies: [] }, { id: "T3", dependencies: [] }], now: 1 });
+  startTicket(state, "T1"); assert.equal(applyEvidencedOutcome(state, "T1", report("needs_decision"), "needs_decision").ok, true);
+  const firstReport = structuredClone(state.tickets[0].evidence!.acceptedReports[0].report);
+  startTicket(state, "T2"); const second = report("needs_decision");
+  second.workUnit.ticketId = "T2"; second.decisionPacket.affectedWorkUnitIds = ["T2"]; second.decisionPacket.affectedTicketIds = ["T2"]; second.decisionPacket.affectedFiles = ["tests/x.ts"]; second.decisionPacket.representativeLocators = ["tests/x.ts:2"]; second.decisionPacket.consequences = "Tests retain existing semantics."; second.decisionPacket.occurrences = 2;
+  assert.equal(applyEvidencedOutcome(state, "T2", second, "needs_decision").ok, true);
+  const canonical = state.decisionIndex![0].packet;
+  assert.deepEqual(canonical.affectedTicketIds, ["T1", "T2"]);
+  assert.deepEqual(state.tickets[0].evidence?.pendingDecision, canonical);
+  assert.deepEqual(state.tickets[1].evidence?.pendingDecision, canonical);
+  assert.match(state.tickets[0].note!, /Callers retain existing semantics/);
+  assert.match(state.tickets[0].note!, /Tests retain existing semantics/);
+  assert.deepEqual(state.tickets[0].evidence?.acceptedReports[0].report, firstReport);
+  assert.equal(canonical.occurrences, 2); // max avoids double-counting overlapping searches
+
+  startTicket(state, "T3"); const uncounted = report("needs_decision");
+  uncounted.workUnit.ticketId = "T3"; uncounted.decisionPacket.affectedWorkUnitIds = ["T3"]; uncounted.decisionPacket.affectedTicketIds = ["T3"]; delete uncounted.decisionPacket.occurrences; uncounted.decisionPacket.notCountedReason = "Generated files prevent a reliable count."; uncounted.decisionPacket.unrelatedWorkSafe = false;
+  assert.equal(applyEvidencedOutcome(state, "T3", uncounted, "needs_decision").ok, true);
+  assert.equal(state.decisionIndex![0].packet.occurrences, 2);
+  assert.equal(state.decisionIndex![0].packet.notCountedReason, undefined);
+  assert.equal(state.decisionIndex![0].packet.unrelatedWorkSafe, false);
+  assert.equal(isBatchRunState(structuredClone(state)), true);
+});
+
+test("changed owner question at the same structural locus does not merge", () => {
+  const state = createRunState({ batchId: "b", source: "tickets.md", fingerprint: "fp", order: ["T1", "T2"], tickets: [{ id: "T1", dependencies: [] }, { id: "T2", dependencies: [] }], now: 1 });
+  startTicket(state, "T1"); assert.equal(applyEvidencedOutcome(state, "T1", report("needs_decision"), "needs_decision").ok, true);
+  startTicket(state, "T2"); const different = report("needs_decision"); different.workUnit.ticketId = "T2"; different.decisionPacket.affectedWorkUnitIds = ["T2"]; different.decisionPacket.affectedTicketIds = ["T2"]; different.decisionPacket.question = "Which compatibility contract should apply?";
+  assert.equal(applyEvidencedOutcome(state, "T2", different, "needs_decision").ok, true);
+  assert.equal(state.decisionIndex?.length, 2);
+});
+
+test("packet-bearing non-decision reports reject atomically without index pollution", () => {
+  const state = baseState(); startTicket(state, "T1"); const before = structuredClone(state);
+  const invalid = report();
+  invalid.decisionPacket = structuredClone(report("needs_decision").decisionPacket);
+  assert.equal(applyEvidencedOutcome(state, "T1", invalid, "completed").ok, false);
+  assert.deepEqual(state, before);
+});
+
+test("unsafe decisions stop unrelated scheduling while safe decisions permit it", () => {
+  for (const unrelatedWorkSafe of [false, true]) {
+    const state = createRunState({ batchId: "b", source: "tickets.md", fingerprint: "fp", order: ["T1", "T2"], tickets: [{ id: "T1", dependencies: [] }, { id: "T2", dependencies: [] }], now: 1 });
+    startTicket(state, "T1"); const decision = report("needs_decision"); decision.decisionPacket.unrelatedWorkSafe = unrelatedWorkSafe;
+    assert.equal(applyEvidencedOutcome(state, "T1", decision, "needs_decision").ok, true);
+    assert.equal(nextActionableTicket(state)?.id, unrelatedWorkSafe ? "T2" : undefined);
+    assert.equal(shouldContinue(state), unrelatedWorkSafe);
+    assert.equal(stopReason(state), unrelatedWorkSafe ? "running" : "needs_decision");
+  }
 });
 
 test("degraded completion derives warning, actual topology, guidance, and continue acknowledgment", () => {

@@ -323,11 +323,11 @@ export default function (pi: ExtensionAPI) {
   pi.registerTool({
     name: "batch_report",
     label: "Batch Report Outcome",
-    description: "Report a structured completed, retry, failed, or blocked outcome for the current ticket. Use retry to re-attempt within the retry cap.",
+    description: "Report a structured completed, retry, failed, blocked, or needs_decision outcome for the current ticket. needs_decision requires a complete replayable decision packet. Use retry to re-attempt within the retry cap.",
     promptSnippet: "Report the outcome of a ticket in the active ticket batch",
     parameters: Type.Object({
       id: Type.String({ description: "Ticket id, e.g. T2" }),
-      outcome: StringEnum(["completed", "retry", "failed", "blocked"] as const),
+      outcome: StringEnum(["completed", "retry", "failed", "blocked", "needs_decision"] as const),
       report: Type.Any({ description: "Required version-1 structured team-orchestration evidence envelope; prose notes cannot authorize an outcome." }),
     }),
     async execute(_id, params, _signal, _onUpdate, ctx) {

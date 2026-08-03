@@ -15,14 +15,17 @@ export type TicketOutcome =
   | "needs_decision";
 
 import {
+  decisionPacketEquivalenceKey,
+  isDecisionPacket,
   parseTeamOrchestrationEnvelope,
+  type DecisionPacket,
   type RequestedOutcome,
   type TeamOrchestrationEnvelopeV1,
 } from "./team-orchestration-protocol.ts";
 
 export type AcceptedReportRecord = {
   attempt: number;
-  outcome: Exclude<TicketOutcome, "needs_decision">;
+  outcome: TicketOutcome;
   report: TeamOrchestrationEnvelopeV1;
 };
 
@@ -31,6 +34,13 @@ export type TicketEvidenceState = {
   acceptedReports: AcceptedReportRecord[];
   /** A retry leaves its failed/incomplete evidence available to the next attempt. */
   pendingEvidence?: TeamOrchestrationEnvelopeV1;
+  /** The accepted escalation evidence for this ticket, if it needs an owner decision. */
+  pendingDecision?: DecisionPacket;
+};
+
+export type DecisionIndexEntry = {
+  key: string;
+  packet: DecisionPacket;
 };
 
 export type RunTicket = {
@@ -54,6 +64,8 @@ export type BatchRunState = {
   continuationsUsed: number;
   order: string[];
   tickets: RunTicket[];
+  /** Canonical replayable owner decisions, deduplicated by structural evidence. */
+  decisionIndex?: DecisionIndexEntry[];
   createdAt: number;
   updatedAt: number;
 };
@@ -86,6 +98,16 @@ function isIntegerAtLeast(value: unknown, minimum: number): value is number {
 }
 
 export function isBatchRunState(value: unknown): value is BatchRunState {
+  // Session entries are untrusted persisted data. A malformed index must never
+  // make reconstruction throw or prevent recovery from an earlier snapshot.
+  try {
+    return isBatchRunStateUnchecked(value);
+  } catch {
+    return false;
+  }
+}
+
+function isBatchRunStateUnchecked(value: unknown): value is BatchRunState {
   if (!value || typeof value !== "object" || Array.isArray(value)) return false;
   const state = value as Partial<BatchRunState>;
   if (state.version !== 1 || typeof state.batchId !== "string" || typeof state.source !== "string" || typeof state.fingerprint !== "string") return false;
@@ -107,7 +129,7 @@ export function isBatchRunState(value: unknown): value is BatchRunState {
       if (!ticket.evidence || typeof ticket.evidence !== "object" || !Array.isArray(ticket.evidence.acceptedReports)) return false;
       for (const record of ticket.evidence.acceptedReports) {
         if (!record || typeof record !== "object" || !isIntegerAtLeast(record.attempt, 1)
-          || !["completed", "retry", "failed", "blocked"].includes(record.outcome)) return false;
+          || !["completed", "retry", "failed", "blocked", "needs_decision"].includes(record.outcome)) return false;
         const parsed = parseTeamOrchestrationEnvelope(record.report);
         if (!parsed.ok || record.attempt > ticket.attempts || parsed.value.workUnit.ticketId !== ticket.id
           || parsed.value.workUnit.source !== state.source || parsed.value.workUnit.sourceFingerprint !== state.fingerprint
@@ -119,11 +141,33 @@ export function isBatchRunState(value: unknown): value is BatchRunState {
           || pending.value.workUnit.source !== state.source || pending.value.workUnit.sourceFingerprint !== state.fingerprint
           || pending.value.workUnit.attempt > ticket.attempts) return false;
       }
+      if (ticket.evidence.pendingDecision !== undefined && (!isDecisionPacket(ticket.evidence.pendingDecision)
+        || !ticket.evidence.pendingDecision.affectedTicketIds.includes(ticket.id))) return false;
     }
     if (ticket.status === "in_progress") inProgress += 1;
     ids.add(ticket.id);
   }
   if (inProgress > 1 || state.order.length !== ids.size || !state.order.every((id) => ids.has(id))) return false;
+  if (state.decisionIndex !== undefined) {
+    if (!Array.isArray(state.decisionIndex)) return false;
+    const indexedPackets = new Map<string, DecisionPacket>();
+    for (const entry of state.decisionIndex) {
+      if (!entry || typeof entry !== "object" || typeof entry.key !== "string" || !entry.packet || !isDecisionPacket(entry.packet)
+        || entry.key !== decisionPacketEquivalenceKey(entry.packet) || indexedPackets.has(entry.key)
+        || !entry.packet.affectedTicketIds.every((id) => ids.has(id))
+        || !entry.packet.affectedWorkUnitIds.every((id) => ids.has(id))) return false;
+      indexedPackets.set(entry.key, entry.packet);
+    }
+    for (const ticket of state.tickets) {
+      const pending = ticket.evidence?.pendingDecision;
+      if (pending !== undefined) {
+        const canonical = indexedPackets.get(decisionPacketEquivalenceKey(pending));
+        // A pending packet is a persisted denormalization of its index entry;
+        // require exact canonical reconstruction rather than merely a matching key.
+        if (!canonical || JSON.stringify(pending) !== JSON.stringify(canonical)) return false;
+      }
+    }
+  }
   return state.tickets.every((ticket) => ticket.dependencies.every((id) => id !== ticket.id && ids.has(id)));
 }
 
@@ -153,6 +197,7 @@ export function createRunState(input: CreateRunInput): BatchRunState {
     continuationsUsed: 0,
     order,
     tickets,
+    decisionIndex: [],
     createdAt: now,
     updatedAt: now,
   };
@@ -193,9 +238,14 @@ export function propagateSkips(state: BatchRunState): boolean {
   return changed;
 }
 
+function hasUnsafePendingDecision(state: BatchRunState): boolean {
+  return state.tickets.some((ticket) => ticket.status === "needs_decision" && ticket.evidence?.pendingDecision?.unrelatedWorkSafe === false);
+}
+
 /** The next queued ticket, in order, whose dependencies are all completed. */
 export function nextActionableTicket(state: BatchRunState): RunTicket | undefined {
   propagateSkips(state);
+  if (hasUnsafePendingDecision(state)) return undefined;
   for (const id of state.order) {
     const ticket = byId(state, id);
     if (ticket && ticket.status === "queued" && depsSatisfied(state, ticket)) return ticket;
@@ -219,7 +269,7 @@ export type EvidencedOutcomeFailureCode =
   | "completed-evidence-incomplete"
   | "retry-evidence-incomplete"
   | "failure-evidence-incomplete"
-  | "needs-decision-requires-t3"
+  | "needs-decision-evidence-incomplete"
   | "invalid-transition";
 
 export type EvidencedOutcomeResult =
@@ -232,7 +282,12 @@ function runRouteFact(label: string, run: TeamOrchestrationEnvelopeV1["runs"][nu
   return `${label}=${run.provider.provider}${model} (fallback ${run.provider.fallback ? "yes" : "no"}; thinking ${run.provider.effectiveThinking ?? "unknown"})`;
 }
 
+function decisionNote(packet: DecisionPacket): string {
+  return `NEEDS_DECISION: ${packet.question} Safe default: ${packet.safeDefault}. Consequences: ${packet.consequences}. Replay: ${packet.replayCommand}`;
+}
+
 function reportNote(report: TeamOrchestrationEnvelopeV1): string {
+  if (report.requestedOutcome === "needs_decision") return decisionNote(report.decisionPacket!);
   const summary = `Evidence accepted: ${report.requestedOutcome}; parent gate ${report.parentGate.action}; validations ${report.parentValidation.filter((item) => item.outcome === "passed").length}/${report.parentValidation.length} passed.`;
   if (!report.diversity.degraded) return summary;
   const warning = report.diversity.warning!;
@@ -298,6 +353,54 @@ function failureEvidenceFailure(report: TeamOrchestrationEnvelopeV1): string | u
     : "failed/blocked requires a rejected/escalated parent gate, final-fingerprint non-passing validation, replayable failed-stage observation, and explicit retry-safety residual evidence";
 }
 
+function decisionFailure(state: BatchRunState, report: TeamOrchestrationEnvelopeV1, activeTicket: RunTicket): string | undefined {
+  const packet = report.decisionPacket;
+  const knownIds = new Set(state.tickets.map((ticket) => ticket.id));
+  return packet && packet.affectedTicketIds.includes(activeTicket.id) && packet.affectedWorkUnitIds.includes(activeTicket.id)
+    && packet.affectedTicketIds.every((id) => knownIds.has(id)) && packet.affectedWorkUnitIds.every((id) => knownIds.has(id))
+    && rejectedOrEscalatedParentGate(report)
+    ? undefined
+    : "needs_decision requires a complete packet tied only to known batch work units and a parent rejected/escalated gate";
+}
+
+function sortedUnique(values: string[]): string[] {
+  return [...new Set(values)].sort((left, right) => left.localeCompare(right));
+}
+
+function combineText(existing: string, incoming: string): string {
+  // Values produced by an earlier merge are delimiter-separated procedures;
+  // split them again so repeated merges are associative and order-independent.
+  return sortedUnique([existing, incoming].flatMap((value) => value.split("; then "))).join("; then ");
+}
+
+/**
+ * Additive canonicalization for structurally equivalent owner decisions.
+ * `occurrences` uses max: reports may search overlapping scopes, so summing
+ * would over-count. A reliable count takes precedence over not-counted detail.
+ */
+function mergeDecisionPackets(existing: DecisionPacket, incoming: DecisionPacket): DecisionPacket {
+  const counts = [existing.occurrences, incoming.occurrences].filter((value): value is number => typeof value === "number");
+  const merged: DecisionPacket = {
+    ...existing,
+    affectedWorkUnitIds: sortedUnique([...existing.affectedWorkUnitIds, ...incoming.affectedWorkUnitIds]),
+    affectedTicketIds: sortedUnique([...existing.affectedTicketIds, ...incoming.affectedTicketIds]),
+    affectedFiles: sortedUnique([...existing.affectedFiles, ...incoming.affectedFiles]),
+    representativeLocators: sortedUnique([...existing.representativeLocators, ...incoming.representativeLocators]),
+    replayCommand: combineText(existing.replayCommand, incoming.replayCommand),
+    disconfirmProcedure: combineText(existing.disconfirmProcedure, incoming.disconfirmProcedure),
+    consequences: combineText(existing.consequences, incoming.consequences),
+    unrelatedWorkSafe: existing.unrelatedWorkSafe && incoming.unrelatedWorkSafe,
+  };
+  if (counts.length > 0) {
+    merged.occurrences = Math.max(...counts);
+    delete merged.notCountedReason;
+  } else {
+    delete merged.occurrences;
+    merged.notCountedReason = combineText(existing.notCountedReason!, incoming.notCountedReason!);
+  }
+  return merged;
+}
+
 /**
  * Parses and gates a report before mutating state.  This is deliberately the
  * extension-facing transition: applyOutcome remains the basic state-machine seam.
@@ -309,26 +412,46 @@ export function applyEvidencedOutcome(state: BatchRunState, id: string, reportVa
   if (!parsed.ok) return { ok: false, error: { code: "invalid-report", message: `${parsed.error.code}: ${parsed.error.message}` } };
   const report = parsed.value;
   if (report.workUnit.ticketId !== ticket.id || report.workUnit.source !== state.source || report.workUnit.sourceFingerprint !== state.fingerprint || report.workUnit.attempt !== ticket.attempts) return { ok: false, error: { code: "wrong-work-unit", message: "Report work-unit ticket, source fingerprint, or attempt does not match active state." } };
-  if (report.requestedOutcome === "needs_decision") return { ok: false, error: { code: "needs-decision-requires-t3", message: "Structured needs_decision reporting requires T3 decision-packet support." } };
   if (expectedOutcome !== undefined && expectedOutcome !== report.requestedOutcome) return { ok: false, error: { code: "wrong-outcome", message: "Requested outcome does not match the structured report." } };
-  const outcome: Exclude<RequestedOutcome, "needs_decision"> = report.requestedOutcome;
+  const outcome: RequestedOutcome = report.requestedOutcome;
   let problem: string | undefined;
   if (outcome === "completed") problem = completionFailure(report);
   else if (outcome === "retry") problem = retryFailure(report);
+  else if (outcome === "needs_decision") problem = decisionFailure(state, report, ticket);
   else problem = failureEvidenceFailure(report);
-  if (problem) return { ok: false, error: { code: outcome === "completed" ? "completed-evidence-incomplete" : outcome === "retry" ? "retry-evidence-incomplete" : "failure-evidence-incomplete", message: problem } };
+  if (problem) return { ok: false, error: { code: outcome === "completed" ? "completed-evidence-incomplete" : outcome === "retry" ? "retry-evidence-incomplete" : outcome === "needs_decision" ? "needs-decision-evidence-incomplete" : "failure-evidence-incomplete", message: problem } };
 
   // Build defensive provenance first, but do not commit it unless the status
   // transition succeeds. Keep prior pending retry evidence through later reports.
   const record: AcceptedReportRecord = { attempt: ticket.attempts, outcome, report: structuredClone(report) };
   const prior = ticket.evidence ?? { acceptedReports: [] };
+  const packet = report.decisionPacket;
+  const existing = packet && state.decisionIndex?.find((entry) => entry.key === decisionPacketEquivalenceKey(packet));
+  const mergedPacket = packet && (existing ? mergeDecisionPackets(existing.packet, packet) : structuredClone(packet));
+  const nextIndex = packet ? [
+    ...(state.decisionIndex ?? []).filter((entry) => entry.key !== decisionPacketEquivalenceKey(packet)).map((entry) => structuredClone(entry)),
+    { key: decisionPacketEquivalenceKey(packet), packet: mergedPacket! },
+  ] : state.decisionIndex;
   const evidence: TicketEvidenceState = {
     acceptedReports: [...prior.acceptedReports.map((accepted) => structuredClone(accepted)), record],
     pendingEvidence: outcome === "retry" ? structuredClone(report) : prior.pendingEvidence && structuredClone(prior.pendingEvidence),
+    pendingDecision: outcome === "needs_decision" ? structuredClone(mergedPacket!) : prior.pendingDecision && structuredClone(prior.pendingDecision),
   };
-  const transitioned = applyOutcome(state, id, outcome, reportNote(report));
+  const transitioned = applyOutcome(state, id, outcome, reportNote({ ...report, decisionPacket: mergedPacket }));
   if (!transitioned) return { ok: false, error: { code: "invalid-transition", message: "Ticket could not transition." } };
   transitioned.evidence = evidence;
+  state.decisionIndex = nextIndex;
+  if (mergedPacket) {
+    const key = decisionPacketEquivalenceKey(mergedPacket);
+    // Earlier escalations retain their original accepted envelopes, but their
+    // derived presentation and pending canonical packet must converge.
+    for (const affected of state.tickets) {
+      if (affected.evidence?.pendingDecision && decisionPacketEquivalenceKey(affected.evidence.pendingDecision) === key) {
+        affected.evidence.pendingDecision = structuredClone(mergedPacket);
+        affected.note = decisionNote(mergedPacket);
+      }
+    }
+  }
   return { ok: true, ticket: transitioned };
 }
 

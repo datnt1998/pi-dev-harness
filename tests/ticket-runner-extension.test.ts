@@ -7,7 +7,7 @@ import ticketRunner from "../extensions/ticket-runner.ts";
 import { createRunState, startTicket } from "../lib/ticket-runner-state.ts";
 import { fingerprint } from "../lib/ticket-readiness.ts";
 
-function report(source: string, sourceFingerprint: string, outcome: "completed" | "retry" = "completed") {
+function report(source: string, sourceFingerprint: string, outcome: "completed" | "retry" | "needs_decision" = "completed") {
   return {
     protocolVersion: 1,
     workUnit: { source, sourceFingerprint, ticketId: "T1", purpose: "extension gate", attempt: 1 },
@@ -23,7 +23,8 @@ function report(source: string, sourceFingerprint: string, outcome: "completed" 
     dispositions: [], fixAndRereview: { round: 0, fixApplied: false },
     completionFidelity: { criteria: { C1: "verified", C2: "verified", C3: "verified", C4: "verified", C5: "verified", C6: "verified", C7: "verified" }, claims: [{ claim: "test", locator: "log:2", verifiedBy: "parent" }] },
     diversity: { achievedIndependence: "provider-distinct", degraded: false }, residualRisks: outcome === "completed" ? [] : ["retry safely after fix"], requestedOutcome: outcome,
-    parentGate: { actor: "parent", role: "parent", action: outcome === "completed" ? "accepted" : "rejected", observedFingerprint: "impl", evidenceLocator: "log:3" },
+    ...(outcome === "needs_decision" ? { decisionPacket: { affectedWorkUnitIds: ["T1"], affectedTicketIds: ["T1"], affectedFiles: ["lib/x.ts"], locatorOrGlob: "lib/x.ts:1", searchedScope: "lib", exclusions: [], pattern: "missing invariant", patternKind: "code-shape", occurrences: 1, representativeLocators: ["lib/x.ts:1"], question: "Which behavior should apply?", safeDefault: "No change.", consequences: "Compatibility remains unchanged.", replayCommand: "rg invariant lib", disconfirmProcedure: "Inspect the locator.", blockedStage: "implementation", unrelatedWorkSafe: true } } : {}),
+    parentGate: { actor: "parent", role: "parent", action: outcome === "completed" ? "accepted" : "escalated", observedFingerprint: "impl", evidenceLocator: "log:3" },
   };
 }
 
@@ -88,17 +89,26 @@ test("extension restores the latest valid cloned snapshot and ignores malformed 
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });
 
-test("extension rejects wrong active id, source changes, and does not advertise T3 needs_decision", async () => {
+test("extension rejects wrong active id and source changes while accepting structured needs_decision", async () => {
   const dir = mkdtempSync(join(tmpdir(), "ticket-runner-"));
   try {
     const source = join(dir, "tickets.md"); const raw = "# tickets\n"; writeFileSync(source, raw);
     const state = createRunState({ batchId: "b", source, fingerprint: fingerprint(raw), order: ["T1"], tickets: [{ id: "T1", dependencies: [] }], now: 1 }); startTicket(state, "T1");
     const pi = fakePi(); pi.entries.push({ type: "custom", customType: "ticket-batch-state", data: structuredClone(state) }); ticketRunner(pi as never); const ctx = context(dir, pi);
     for (const handler of pi.handlers.session_start) handler({}, ctx);
-    assert.doesNotMatch(pi.tools.batch_report.description, /needs_decision/);
-    assert.deepEqual(pi.tools.batch_report.parameters.properties.outcome.enum, ["completed", "retry", "failed", "blocked"]);
+    assert.match(pi.tools.batch_report.description, /needs_decision/);
+    assert.deepEqual(pi.tools.batch_report.parameters.properties.outcome.enum, ["completed", "retry", "failed", "blocked", "needs_decision"]);
     const wrong = await pi.tools.batch_report.execute("x", { id: "T2", outcome: "completed", report: report(source, fingerprint(raw)) }, undefined, undefined, ctx);
     assert.match(wrong.content[0].text, /not the active/);
+    const incomplete = report(source, fingerprint(raw), "needs_decision") as any; incomplete.decisionPacket.replayCommand = "";
+    const rejected = await pi.tools.batch_report.execute("x", { id: "T1", outcome: "needs_decision", report: incomplete }, undefined, undefined, ctx);
+    assert.match(rejected.content[0].text, /Outcome rejected/);
+    const decision = await pi.tools.batch_report.execute("x", { id: "T1", outcome: "needs_decision", report: report(source, fingerprint(raw), "needs_decision") }, undefined, undefined, ctx);
+    assert.match(decision.content[0].text, /Recorded T1 → needs_decision/);
+    assert.match((pi.entries.at(-1) as any).data.tickets[0].note, /Safe default: No change/);
+    // Fresh state for the source freshness branch because the valid decision is terminal.
+    const fresh = createRunState({ batchId: "fresh", source, fingerprint: fingerprint(raw), order: ["T1"], tickets: [{ id: "T1", dependencies: [] }], now: 1 }); startTicket(fresh, "T1"); pi.entries.push({ type: "custom", customType: "ticket-batch-state", data: structuredClone(fresh) });
+    for (const handler of pi.handlers.session_start) handler({}, ctx);
     writeFileSync(source, "changed");
     const changed = await pi.tools.batch_report.execute("x", { id: "T1", outcome: "completed", report: report(source, fingerprint(raw)) }, undefined, undefined, ctx);
     assert.match(changed.content[0].text, /source changed; result not recorded/);

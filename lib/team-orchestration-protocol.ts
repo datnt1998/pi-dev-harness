@@ -132,6 +132,28 @@ export type ParentGate = {
   evidenceLocator: string;
 };
 
+/** Replayable owner-decision evidence. The exact blocking question is part of its identity. */
+export type DecisionPacket = {
+  affectedWorkUnitIds: string[];
+  affectedTicketIds: string[];
+  affectedFiles: string[];
+  locatorOrGlob: string;
+  searchedScope: string;
+  exclusions: string[];
+  pattern: string;
+  patternKind: "code-shape" | "decision-category" | "combined";
+  occurrences?: number;
+  notCountedReason?: string;
+  representativeLocators: string[];
+  question: string;
+  safeDefault: string;
+  consequences: string;
+  replayCommand: string;
+  disconfirmProcedure: string;
+  blockedStage: string;
+  unrelatedWorkSafe: boolean;
+};
+
 export type TeamOrchestrationEnvelopeV1 = {
   protocolVersion: ProtocolVersion;
   workUnit: WorkUnitIdentity;
@@ -147,6 +169,8 @@ export type TeamOrchestrationEnvelopeV1 = {
   diversity: DiversityEvidence;
   residualRisks: string[];
   requestedOutcome: RequestedOutcome;
+  /** Required only when requestedOutcome is needs_decision. */
+  decisionPacket?: DecisionPacket;
   parentGate: ParentGate;
 };
 
@@ -156,7 +180,8 @@ export type ProtocolFailureCode =
   | "malformed-envelope"
   | "child-gate-authority"
   | "invalid-parent-gate"
-  | "invalid-provider-diversity";
+  | "invalid-provider-diversity"
+  | "invalid-decision-packet";
 
 export type ProtocolValidationFailure = {
   ok: false;
@@ -235,6 +260,41 @@ export function implementationStateFingerprint(state: unknown): string {
   return createHash("sha256").update(JSON.stringify(canonicalize(state)), "utf8").digest("hex");
 }
 
+export function isDecisionPacket(value: unknown): value is DecisionPacket {
+  if (!object(value)
+    || !strings(value.affectedWorkUnitIds) || value.affectedWorkUnitIds.length === 0
+    || !strings(value.affectedTicketIds) || value.affectedTicketIds.length === 0
+    || !strings(value.affectedFiles) || value.affectedFiles.length === 0
+    || !nonEmpty(value.locatorOrGlob) || !nonEmpty(value.searchedScope) || !strings(value.exclusions)
+    || !nonEmpty(value.pattern) || !["code-shape", "decision-category", "combined"].includes(value.patternKind as string)
+    || !strings(value.representativeLocators) || value.representativeLocators.length === 0
+    || !nonEmpty(value.question) || !nonEmpty(value.safeDefault) || !nonEmpty(value.consequences)
+    || !nonEmpty(value.replayCommand) || !nonEmpty(value.disconfirmProcedure)
+    || !nonEmpty(value.blockedStage) || typeof value.unrelatedWorkSafe !== "boolean") return false;
+  const hasCount = Number.isInteger(value.occurrences) && (value.occurrences as number) >= 0;
+  const hasReason = nonEmpty(value.notCountedReason);
+  return hasCount !== hasReason;
+}
+
+/**
+ * Deterministic structural identity for one owner decision. Evidence which can
+ * aggregate (affected IDs/files, representative locators, and replay details)
+ * intentionally stays out; the exact blocking question prevents distinct owner
+ * choices at one locus from collapsing into one escalation.
+ */
+export function decisionPacketEquivalenceKey(packet: DecisionPacket): string {
+  return implementationStateFingerprint({
+    patternKind: packet.patternKind,
+    pattern: packet.pattern,
+    locatorOrGlob: packet.locatorOrGlob,
+    searchedScope: packet.searchedScope,
+    exclusions: [...packet.exclusions].sort(),
+    question: packet.question,
+    safeDefault: packet.safeDefault,
+    blockedStage: packet.blockedStage,
+  });
+}
+
 function validProvider(value: unknown): boolean {
   return object(value) && nonEmpty(value.provider) && typeof value.fallback === "boolean"
     && (value.model === undefined || nonEmpty(value.model))
@@ -303,6 +363,12 @@ export function parseTeamOrchestrationEnvelope(value: unknown): ProtocolValidati
   if (!object(value) || value.protocolVersion === undefined) return failure("missing-version", "Evidence envelope must declare protocolVersion.", "protocolVersion");
   if (value.protocolVersion !== TEAM_ORCHESTRATION_PROTOCOL_VERSION) return failure("unknown-version", "Evidence envelope protocolVersion is not supported.", "protocolVersion");
   if (!hasRequiredEnvelopeShape(value)) return failure("malformed-envelope", "Evidence envelope lacks required version-1 evidence categories.");
+  if (value.requestedOutcome === "needs_decision" && !isDecisionPacket(value.decisionPacket)) {
+    return failure("invalid-decision-packet", "needs_decision requires a complete replayable decision packet.", "decisionPacket");
+  }
+  if (value.requestedOutcome !== "needs_decision" && value.decisionPacket !== undefined) {
+    return failure("invalid-decision-packet", "decisionPacket is legal only when requestedOutcome is needs_decision.", "decisionPacket");
+  }
 
   const childCarriers = [
     ...(value.runs as Record<string, unknown>[]).filter((run) => run.role !== "parent"),
