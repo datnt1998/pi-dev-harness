@@ -151,7 +151,7 @@ export default function (pi: ExtensionAPI) {
       // Coordination is best-effort; the runner must keep working without consumers.
     }
     pi.sendUserMessage(
-      "/skill:batch-implementation continue the active ticket batch: call batch_next, implement one ticket with review/fix, then batch_report.",
+      "/skill:batch-implementation continue the active ticket batch: call batch_next, implement one ticket, close the writer handoff at a stable fingerprint, collect separate sealed Standards and Spec review axes, parent-dispose findings, then batch_report.",
       { deliverAs: "followUp" },
     );
   });
@@ -232,7 +232,7 @@ export default function (pi: ExtensionAPI) {
         // Best-effort.
       }
       pi.sendUserMessage(
-        `/skill:batch-implementation A pre-approved ticket batch is active (source ${sourcePath}, commit=${commit}). The parent is the sole writer: call batch_next, then implement and validate. If pi-subagents is available, run an async fresh-context review-only reviewer; otherwise run the skill's explicit structured self-review fallback and record that independent isolation was unavailable. Apply scoped fixes in the parent, then call batch_report with evidence. Continue until batch_next reports done or a decision is required. Do not ask for per-ticket confirmation.`,
+        `/skill:batch-implementation A pre-approved ticket batch is active (source ${sourcePath}, commit=${commit}). The parent is the sole writer: call batch_next, then implement and validate. If pi-subagents is available, close the writer handoff and record one stable implementation fingerprint before review. Require separate fresh Standards and Spec review calls against that fingerprint; each must prove read-only capability sealing or serialized pre/post mutation fingerprints. Before an affected review stage, compare the target with configured/resolved provenance. Record actual provider/model, fallback, effective-model, and effective-thinking confidence—not requested routes. For provider overlap, fallback, or unknown effective model/thinking, display the complete degraded-topology warning and require an explicit operator continue acknowledgment before launch; persist and repeat it in terminal evidence, and never call it independent or clean pilot evidence. If sealed subagents are unavailable, a structured self-review fallback may aid diagnosis but cannot authorize high-risk/package-policy completion or independence. Missing, combined, self, stale, unsealed, or mutated reviews fail closed. Parent-dispose every finding with replay evidence, apply only scoped fixes, then call batch_report with structured evidence. Continue until batch_next reports done or a decision is required. Do not ask for per-ticket confirmation.`,
         { deliverAs: ctx.isIdle() ? undefined : "followUp" },
       );
     },
@@ -291,7 +291,7 @@ export default function (pi: ExtensionAPI) {
           content: [
             {
               type: "text",
-              text: `Resume ticket ${resuming.id} (attempt ${resuming.attempts}). commit=${current.commit}.\n\n${ticketRaw(ctx, current, resuming.id)}\n\nAs the sole parent writer, finish implement/validate/fresh-review/scoped-fix, then call batch_report with evidence.`,
+              text: `Resume ticket ${resuming.id} (attempt ${resuming.attempts}). commit=${current.commit}.\n\n${ticketRaw(ctx, current, resuming.id)}\n\nAs the sole parent writer, finish implementation and parent validation, close the stable writer handoff, collect separate fresh sealed Standards and Spec evidence with actual provenance and any required pre-stage degradation acknowledgment, parent-dispose findings, then call batch_report.`,
             },
           ],
           details: { id: resuming.id, attempt: resuming.attempts, commit: current.commit, resumed: true },
@@ -312,7 +312,7 @@ export default function (pi: ExtensionAPI) {
         content: [
           {
             type: "text",
-            text: `Work ticket ${next.id} (attempt ${next.attempts}). commit=${current.commit}.\n\n${ticketRaw(ctx, current, next.id)}\n\nAs the sole parent writer, run implement/validate/fresh-review/scoped-fix, then call batch_report with evidence.`,
+            text: `Work ticket ${next.id} (attempt ${next.attempts}). commit=${current.commit}.\n\n${ticketRaw(ctx, current, next.id)}\n\nAs the sole parent writer, implement and parent-validate, close the stable writer handoff, collect separate fresh sealed Standards and Spec evidence with actual provenance and any required pre-stage degradation acknowledgment, parent-dispose findings, then call batch_report.`,
           },
         ],
         details: { id: next.id, attempt: next.attempts, commit: current.commit },

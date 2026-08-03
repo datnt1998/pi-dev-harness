@@ -318,7 +318,17 @@ Rollback only the implicated role:
 
 Arbitration stops at the cheapest decisive rung. Machine evidence settles C1–C6 and falsifiable bars; a fresh scarce-premium reviewer handles unresolved no-test-bar or suspected C7 disputes; the owner breaks ties and records reusable precedent. Arbitration accounting never enters the production numerator.
 
-## 13. Fan-in completion record
+## 13. Stable-state two-axis review and actual provenance
+
+For high-risk, no-test-bar, and package-policy implementation work, completion requires a parent-observed stable writer handoff fingerprint followed by two separate review calls: Standards and Spec. Both reviewers are fresh-context, observation-only, and inspect that fingerprint. A reviewer role label, no-edit instruction, or read-only acceptance field is not sealing evidence.
+
+Each axis records a sealed-reader capability (no mutation tools/project-local output and non-mutating commands) **or** serialized/isolation pre/post implementation fingerprints. A pre/post mismatch is reviewer mutation and disqualifies review. Parallel axes are allowed only when capability sealing is proven; otherwise serialize them. Missing axis, combined call, self-review, stale fingerprint, absent seal, mutation, or a missing/duplicate parent finding disposition fails closed. These evidence-integrity failures never use a degradation exception.
+
+Provider independence is derived only from actual resolved producer/Standards/Spec provenance: provider/model family, fallback state, and verified effective-model/effective-thinking facts. Three distinct actual provider families with no fallback and verified effective route facts are `provider-distinct`. Before launching any affected execution or review stage, provider overlap, fallback, or unknown/unverified effective model or thinking needs a complete pre-execution/setup warning: target topology; configured and actual identities; the missing, overlap, fallback, or uncertainty; quality consequence; configuration guidance; and an explicit continue-or-stop operator action. Only a recorded explicit **continue** acknowledgment permits that stage and the diversity-degraded path. Persist the warning and acknowledgment, repeat them in status and terminal reporting, and label the result degraded—never independent or clean pilot/promotion evidence. Package policy names no concrete provider route or model.
+
+Workers and reviewers report observations, findings, locators, and replay recipes only. The parent alone verifies and disposes every load-bearing finding (`accepted`, `rejected` with evidence, `deferred` with residual risk, or `escalated`) and records the final gate.
+
+## 14. Fan-in completion record
 
 The parent completion/batch record includes:
 

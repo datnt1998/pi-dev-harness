@@ -37,18 +37,18 @@ function report(outcome: "completed" | "retry" | "failed" | "blocked" | "needs_d
   return {
     protocolVersion: 1,
     workUnit: { source: "tickets.md", sourceFingerprint: "fp", ticketId: "T1", purpose: "state gate", attempt: 1 },
-    runs: [{ role: "producer", actor: "writer", runId: "run-1", contextMode: "fresh", acceptanceMode: "checked", provider: { provider: "producer", fallback: false } }],
-    writerLease: { owner: "writer", phase: "closed", allowedPaths: ["lib/x.ts"], openedAt: "2026-01-01", closedAt: "2026-01-01" },
+    runs: [{ role: "producer", actor: "writer", runId: "run-1", contextMode: "fresh", acceptanceMode: "checked", provider: { provider: "producer", fallback: false, effectiveModel: "verified", effectiveThinking: "verified" } }],
+    writerLease: { owner: "writer", phase: "closed", allowedPaths: ["lib/x.ts"], openedAt: "2026-01-01", closedAt: "2026-01-01", handoffFingerprint: "implementation" },
     implementation: { changedPaths: ["lib/x.ts"], fingerprint: "implementation" },
     producerObservations: [{ summary: "observed failure", locators: ["log:1"], replayCommands: ["node --test"] }],
     parentValidation: [{ command: "node --test", outcome: validationOutcome, locator: "log:2", observedFingerprint: "implementation" }],
     reviews: [
-      { axis: "standards", run: { role: "standards-reviewer", actor: "standards", runId: "standards-1", contextMode: "fresh", acceptanceMode: "reviewed", provider: { provider: "standards", fallback: false } }, reviewedFingerprint: "implementation", verdict: "no-findings", findings: [] },
-      { axis: "spec", run: { role: "spec-reviewer", actor: "spec", runId: "spec-1", contextMode: "fresh", acceptanceMode: "reviewed", provider: { provider: "spec", fallback: false } }, reviewedFingerprint: "implementation", verdict: "no-findings", findings: [] },
+      { axis: "standards", run: { role: "standards-reviewer", actor: "standards", runId: "standards-1", contextMode: "fresh", acceptanceMode: "reviewed", provider: { provider: "standards", fallback: false, effectiveModel: "verified", effectiveThinking: "verified" } }, reviewedFingerprint: "implementation", sealing: { mode: "capability", readOnlyCapabilities: ["read", "search"], evidenceLocator: "seal:standards" }, verdict: "no-findings", findings: [] },
+      { axis: "spec", run: { role: "spec-reviewer", actor: "spec", runId: "spec-1", contextMode: "fresh", acceptanceMode: "reviewed", provider: { provider: "spec", fallback: false, effectiveModel: "verified", effectiveThinking: "verified" } }, reviewedFingerprint: "implementation", sealing: { mode: "serialized", preMutationFingerprint: "implementation", postMutationFingerprint: "implementation", evidenceLocator: "seal:spec" }, verdict: "no-findings", findings: [] },
     ],
     dispositions: [], fixAndRereview: { round: 0, fixApplied: false },
     completionFidelity: { criteria: { C1: "verified", C2: "verified", C3: "verified", C4: "verified", C5: "verified", C6: "verified", C7: "verified" }, claims: [{ claim: "test", locator: "log:2", verifiedBy: "parent" }] },
-    diversity: { achievedIndependence: "provider-distinct", degraded: false }, residualRisks: outcome === "completed" ? [] : ["safe to retry after changing implementation"], requestedOutcome: outcome,
+    diversity: { achievedIndependence: "provider-distinct", degraded: false, cleanPilotEvidence: true }, residualRisks: outcome === "completed" ? [] : ["safe to retry after changing implementation"], requestedOutcome: outcome,
     ...(outcome === "needs_decision" ? { decisionPacket: { affectedWorkUnitIds: ["T1"], affectedTicketIds: ["T1"], affectedFiles: ["lib/x.ts"], locatorOrGlob: "lib/x.ts:1", searchedScope: "lib", exclusions: ["node_modules"], pattern: "missing invariant", patternKind: "decision-category", occurrences: 1, representativeLocators: ["lib/x.ts:1"], question: "Which behavior should apply?", safeDefault: "Leave the current behavior unchanged.", consequences: "Callers retain existing semantics.", replayCommand: "rg invariant lib", disconfirmProcedure: "Inspect the representative locator.", blockedStage: "implementation", unrelatedWorkSafe: true } } : {}),
     parentGate: { actor: "parent", role: "parent", action: outcome === "completed" ? "accepted" : "escalated", observedFingerprint: "implementation", evidenceLocator: "log:3" },
   } as any;
@@ -317,17 +317,17 @@ test("degraded completion derives warning, actual topology, guidance, and contin
   degraded.runs[0].provider.provider = "shared";
   degraded.reviews[0].run.provider.provider = "shared";
   degraded.diversity = {
-    achievedIndependence: "provider-overlap", degraded: true,
-    warning: { targetTopology: "three providers", configuredProviders: ["shared", "spec"], actualProviders: ["shared", "shared", "spec"], missingOrOverlapping: "producer overlaps Standards", qualityConsequence: "correlated blind spots", configurationGuidance: "configure distinct providers" },
+    achievedIndependence: "provider-overlap", degraded: true, cleanPilotEvidence: false,
+    warning: { targetTopology: "three providers", configuredProviders: ["shared", "shared", "spec"], actualProviders: ["shared", "shared", "spec"], missingOrOverlapping: "producer overlaps Standards", qualityConsequence: "correlated blind spots", configurationGuidance: "configure distinct providers" },
     acknowledgment: { actor: "operator", at: "2026-01-01", decision: "continue", reason: "accepted degradation" },
   };
   assert.equal(applyEvidencedOutcome(state, "T1", degraded, "completed").ok, true);
   assert.match(state.tickets[0].note!, /DEGRADED provider-overlap/);
   assert.match(state.tickets[0].note!, /target three providers/);
-  assert.match(state.tickets[0].note!, /configured shared, spec/);
-  assert.match(state.tickets[0].note!, /producer=shared \(fallback no; thinking unknown\)/);
-  assert.match(state.tickets[0].note!, /Standards=shared \(fallback no; thinking unknown\)/);
-  assert.match(state.tickets[0].note!, /Spec=spec \(fallback no; thinking unknown\)/);
+  assert.match(state.tickets[0].note!, /configured shared, shared, spec/);
+  assert.match(state.tickets[0].note!, /producer=shared \(fallback no; thinking verified\)/);
+  assert.match(state.tickets[0].note!, /Standards=shared \(fallback no; thinking verified\)/);
+  assert.match(state.tickets[0].note!, /Spec=spec \(fallback no; thinking verified\)/);
   assert.match(state.tickets[0].note!, /producer overlaps Standards/);
   assert.match(state.tickets[0].note!, /correlated blind spots/);
   assert.match(state.tickets[0].note!, /configure distinct providers/);

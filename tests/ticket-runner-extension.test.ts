@@ -11,18 +11,18 @@ function report(source: string, sourceFingerprint: string, outcome: "completed" 
   return {
     protocolVersion: 1,
     workUnit: { source, sourceFingerprint, ticketId: "T1", purpose: "extension gate", attempt: 1 },
-    runs: [{ role: "producer", actor: "writer", runId: "writer-1", contextMode: "fresh", acceptanceMode: "checked", provider: { provider: "one", fallback: false } }],
-    writerLease: { owner: "writer", phase: "closed", allowedPaths: ["lib/x.ts"], openedAt: "2026-01-01", closedAt: "2026-01-01" },
+    runs: [{ role: "producer", actor: "writer", runId: "writer-1", contextMode: "fresh", acceptanceMode: "checked", provider: { provider: "one", fallback: false, effectiveModel: "verified", effectiveThinking: "verified" } }],
+    writerLease: { owner: "writer", phase: "closed", allowedPaths: ["lib/x.ts"], openedAt: "2026-01-01", closedAt: "2026-01-01", handoffFingerprint: "impl" },
     implementation: { changedPaths: ["lib/x.ts"], fingerprint: "impl" },
     producerObservations: [{ summary: "observation", locators: ["log:1"], replayCommands: ["node --test"] }],
     parentValidation: [{ command: "node --test", outcome: outcome === "completed" ? "passed" : "failed", locator: "log:2", observedFingerprint: "impl" }],
     reviews: [
-      { axis: "standards", run: { role: "standards-reviewer", actor: "standards", runId: "s", contextMode: "fresh", acceptanceMode: "reviewed", provider: { provider: "two", fallback: false } }, reviewedFingerprint: "impl", verdict: "no-findings", findings: [] },
-      { axis: "spec", run: { role: "spec-reviewer", actor: "spec", runId: "p", contextMode: "fresh", acceptanceMode: "reviewed", provider: { provider: "three", fallback: false } }, reviewedFingerprint: "impl", verdict: "no-findings", findings: [] },
+      { axis: "standards", run: { role: "standards-reviewer", actor: "standards", runId: "s", contextMode: "fresh", acceptanceMode: "reviewed", provider: { provider: "two", fallback: false, effectiveModel: "verified", effectiveThinking: "verified" } }, reviewedFingerprint: "impl", sealing: { mode: "capability", readOnlyCapabilities: ["read", "search"], evidenceLocator: "seal:s" }, verdict: "no-findings", findings: [] },
+      { axis: "spec", run: { role: "spec-reviewer", actor: "spec", runId: "p", contextMode: "fresh", acceptanceMode: "reviewed", provider: { provider: "three", fallback: false, effectiveModel: "verified", effectiveThinking: "verified" } }, reviewedFingerprint: "impl", sealing: { mode: "serialized", preMutationFingerprint: "impl", postMutationFingerprint: "impl", evidenceLocator: "seal:p" }, verdict: "no-findings", findings: [] },
     ],
     dispositions: [], fixAndRereview: { round: 0, fixApplied: false },
     completionFidelity: { criteria: { C1: "verified", C2: "verified", C3: "verified", C4: "verified", C5: "verified", C6: "verified", C7: "verified" }, claims: [{ claim: "test", locator: "log:2", verifiedBy: "parent" }] },
-    diversity: { achievedIndependence: "provider-distinct", degraded: false }, residualRisks: outcome === "completed" ? [] : ["retry safely after fix"], requestedOutcome: outcome,
+    diversity: { achievedIndependence: "provider-distinct", degraded: false, cleanPilotEvidence: true }, residualRisks: outcome === "completed" ? [] : ["retry safely after fix"], requestedOutcome: outcome,
     ...(outcome === "needs_decision" ? { decisionPacket: { affectedWorkUnitIds: ["T1"], affectedTicketIds: ["T1"], affectedFiles: ["lib/x.ts"], locatorOrGlob: "lib/x.ts:1", searchedScope: "lib", exclusions: [], pattern: "missing invariant", patternKind: "code-shape", occurrences: 1, representativeLocators: ["lib/x.ts:1"], question: "Which behavior should apply?", safeDefault: "No change.", consequences: "Compatibility remains unchanged.", replayCommand: "rg invariant lib", disconfirmProcedure: "Inspect the locator.", blockedStage: "implementation", unrelatedWorkSafe: true } } : {}),
     parentGate: { actor: "parent", role: "parent", action: outcome === "completed" ? "accepted" : "escalated", observedFingerprint: "impl", evidenceLocator: "log:3" },
   };
@@ -112,6 +112,23 @@ test("extension rejects wrong active id and source changes while accepting struc
     writeFileSync(source, "changed");
     const changed = await pi.tools.batch_report.execute("x", { id: "T1", outcome: "completed", report: report(source, fingerprint(raw)) }, undefined, undefined, ctx);
     assert.match(changed.content[0].text, /source changed; result not recorded/);
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
+test("batch_next coaching requires stable sealed two-axis evidence", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "ticket-runner-"));
+  try {
+    const source = join(dir, "tickets.md"); writeFileSync(source, "# tickets\n");
+    const state = createRunState({ batchId: "coaching", source, fingerprint: fingerprint("# tickets\n"), order: ["T1"], tickets: [{ id: "T1", dependencies: [] }], now: 1 });
+    const pi = fakePi(); pi.entries.push({ type: "custom", customType: "ticket-batch-state", data: structuredClone(state) }); ticketRunner(pi as never); const ctx = context(dir, pi);
+    for (const handler of pi.handlers.session_start) handler({}, ctx);
+    const first = await pi.tools.batch_next.execute("x", {}, undefined, undefined, ctx);
+    assert.match(first.content[0].text, /stable writer handoff/);
+    assert.match(first.content[0].text, /Standards and Spec/);
+    assert.match(first.content[0].text, /degradation acknowledgment/);
+    const resumed = await pi.tools.batch_next.execute("x", {}, undefined, undefined, ctx);
+    assert.match(resumed.content[0].text, /stable writer handoff/);
+    assert.match(resumed.content[0].text, /Standards and Spec/);
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });
 

@@ -12,12 +12,16 @@ export type FindingDisposition = "accepted" | "rejected" | "deferred" | "escalat
 export type IndependenceLevel = "provider-distinct" | "provider-overlap" | "axis-missing" | "combined" | "self-review" | "unknown";
 
 export type ProviderIdentity = {
-  /** Generic provider family, not a project-local route name. */
+  /** Actual resolved generic provider family, not a requested project-local route name. */
   provider: string;
   model?: string;
   requestedProvider?: string;
   requestedModel?: string;
+  /** Whether actual execution diverged from the requested route. */
   fallback: boolean;
+  /** Observation confidence for the effective model route. */
+  effectiveModel?: "verified" | "unverified" | "unknown";
+  /** Observation confidence for the effective thinking/runtime setting, never an inferred claim. */
   effectiveThinking?: "verified" | "unverified" | "unknown";
 };
 
@@ -52,6 +56,8 @@ export type WriterLeaseEvidence = {
   allowedPaths: string[];
   openedAt: string;
   closedAt?: string;
+  /** Parent-observed stable implementation state after the writer closed the lease. */
+  handoffFingerprint?: string;
 };
 
 export type ImplementationState = {
@@ -80,10 +86,27 @@ export type ReviewFinding = {
   replay: string;
 };
 
+export type ReviewerSealEvidence =
+  | {
+    /** Runtime capability controls prevented project mutation. */
+    mode: "capability";
+    readOnlyCapabilities: string[];
+    evidenceLocator: string;
+  }
+  | {
+    /** Isolated/serialized review made any mutation observable. */
+    mode: "serialized";
+    preMutationFingerprint: string;
+    postMutationFingerprint: string;
+    evidenceLocator: string;
+  };
+
 export type ReviewEvidence = {
   axis: ReviewAxis;
   run: RunProvenance;
   reviewedFingerprint: string;
+  /** Required evidence of actual read-only enforcement, never just a role label. */
+  sealing?: ReviewerSealEvidence;
   verdict: "findings" | "no-findings" | "unable-to-review";
   findings: ReviewFinding[];
 };
@@ -120,6 +143,8 @@ export type DiversityWarning = {
 export type DiversityEvidence = {
   achievedIndependence: IndependenceLevel;
   degraded: boolean;
+  /** Explicitly records whether this assignment is eligible as clean pilot evidence. */
+  cleanPilotEvidence?: boolean;
   warning?: DiversityWarning;
   acknowledgment?: { actor: string; at: string; decision: "continue" | "stop"; reason: string };
 };
@@ -181,6 +206,8 @@ export type ProtocolFailureCode =
   | "child-gate-authority"
   | "invalid-parent-gate"
   | "invalid-provider-diversity"
+  | "invalid-review-integrity"
+  | "invalid-finding-disposition"
   | "invalid-decision-packet";
 
 export type ProtocolValidationFailure = {
@@ -221,13 +248,15 @@ export function normalizeProviderIdentity(identity: Pick<ProviderIdentity, "prov
 }
 
 export type IndependenceTopology = {
-  producer?: Pick<ProviderIdentity, "provider" | "model">;
-  standards?: Pick<ProviderIdentity, "provider" | "model">;
-  spec?: Pick<ProviderIdentity, "provider" | "model">;
+  producer?: ProviderIdentity;
+  standards?: ProviderIdentity;
+  spec?: ProviderIdentity;
   producerActor?: string;
   standardsActor?: string;
   specActor?: string;
   combined?: boolean;
+  /** Completion provenance requires explicit effective-thinking verification. */
+  requireVerifiedEffectiveThinking?: boolean;
 };
 
 /** Computes provenance, never an authorization to continue a degraded run. */
@@ -236,7 +265,11 @@ export function classifyIndependence(topology: IndependenceTopology): Independen
   if (!topology.producer) return "unknown";
   if (topology.producerActor && (topology.producerActor === topology.standardsActor || topology.producerActor === topology.specActor)) return "self-review";
   if (topology.combined || (topology.standardsActor !== undefined && topology.standardsActor === topology.specActor)) return "combined";
-  const identities = [topology.producer, topology.standards, topology.spec].map(normalizeProviderIdentity);
+  const provenance = [topology.producer, topology.standards, topology.spec] as Array<Pick<ProviderIdentity, "provider" | "model"> & Partial<ProviderIdentity>>;
+  // Actual route facts, not requested route names, control the claim. A fallback
+  // or absent/unverified effective-thinking observation cannot be clean evidence.
+  if (provenance.some((identity) => identity.fallback === true || (topology.requireVerifiedEffectiveThinking && (identity.effectiveModel !== "verified" || identity.effectiveThinking !== "verified")))) return "unknown";
+  const identities = provenance.map(normalizeProviderIdentity);
   if (identities.some((identity) => !identity)) return "unknown";
   const providers = identities.map((identity) => identity!.provider);
   return new Set(providers).size === providers.length ? "provider-distinct" : "provider-overlap";
@@ -300,6 +333,7 @@ function validProvider(value: unknown): boolean {
     && (value.model === undefined || nonEmpty(value.model))
     && (value.requestedProvider === undefined || nonEmpty(value.requestedProvider))
     && (value.requestedModel === undefined || nonEmpty(value.requestedModel))
+    && (value.effectiveModel === undefined || ["verified", "unverified", "unknown"].includes(value.effectiveModel as string))
     && (value.effectiveThinking === undefined || ["verified", "unverified", "unknown"].includes(value.effectiveThinking as string));
 }
 
@@ -314,10 +348,17 @@ function validValidation(value: unknown): boolean {
     && nonEmpty(value.locator) && nonEmpty(value.observedFingerprint);
 }
 
+function validReviewerSeal(value: unknown): boolean {
+  if (!object(value) || !nonEmpty(value.evidenceLocator)) return false;
+  if (value.mode === "capability") return strings(value.readOnlyCapabilities) && value.readOnlyCapabilities.length > 0;
+  return value.mode === "serialized" && nonEmpty(value.preMutationFingerprint) && nonEmpty(value.postMutationFingerprint);
+}
+
 function validReview(value: unknown): boolean {
   return object(value) && ["standards", "spec"].includes(value.axis as string) && validRun(value.run)
     && ((value.axis === "standards" && object(value.run) && value.run.role === "standards-reviewer") || (value.axis === "spec" && object(value.run) && value.run.role === "spec-reviewer"))
-    && nonEmpty(value.reviewedFingerprint) && ["findings", "no-findings", "unable-to-review"].includes(value.verdict as string)
+    && nonEmpty(value.reviewedFingerprint) && (value.sealing === undefined || validReviewerSeal(value.sealing))
+    && ["findings", "no-findings", "unable-to-review"].includes(value.verdict as string)
     && Array.isArray(value.findings) && value.findings.every((finding) => object(finding) && nonEmpty(finding.id)
       && ["low", "medium", "high", "critical"].includes(finding.severity as string) && nonEmpty(finding.summary) && nonEmpty(finding.locator) && nonEmpty(finding.replay));
 }
@@ -333,7 +374,10 @@ function hasRequiredEnvelopeShape(value: Record<string, unknown>): boolean {
   const validObservation = (item: unknown) => object(item) && nonEmpty(item.summary) && strings(item.locators) && strings(item.replayCommands);
   const validDisposition = (item: unknown) => object(item) && nonEmpty(item.findingId) && ["accepted", "rejected", "deferred", "escalated"].includes(item.disposition as string) && nonEmpty(item.parentActor) && nonEmpty(item.evidenceLocator) && (item.disposition !== "deferred" || nonEmpty(item.residualRisk)) && (item.residualRisk === undefined || nonEmpty(item.residualRisk));
   const validCriterion = (item: unknown) => item === "verified" || item === "unverified" || item === "not-applicable";
-  const validWarning = (item: unknown) => object(item) && nonEmpty(item.targetTopology) && strings(item.configuredProviders) && strings(item.actualProviders) && nonEmpty(item.missingOrOverlapping) && nonEmpty(item.qualityConsequence) && nonEmpty(item.configurationGuidance);
+  const validWarning = (item: unknown) => object(item) && nonEmpty(item.targetTopology)
+    && strings(item.configuredProviders) && item.configuredProviders.length >= 3
+    && strings(item.actualProviders) && item.actualProviders.length === 3
+    && nonEmpty(item.missingOrOverlapping) && nonEmpty(item.qualityConsequence) && nonEmpty(item.configurationGuidance);
   const validAcknowledgment = (item: unknown) => object(item) && nonEmpty(item.actor) && nonEmpty(item.at) && ["continue", "stop"].includes(item.decision as string) && nonEmpty(item.reason);
   return object(workUnit) && nonEmpty(workUnit.source) && nonEmpty(workUnit.sourceFingerprint) && nonEmpty(workUnit.ticketId) && nonEmpty(workUnit.purpose) && Number.isInteger(workUnit.attempt) && (workUnit.attempt as number) > 0
     && object(implementation) && strings(implementation.changedPaths) && nonEmpty(implementation.fingerprint)
@@ -395,17 +439,46 @@ export function parseTeamOrchestrationEnvelope(value: unknown): ProtocolValidati
     producerActor: producerRun?.actor as string | undefined,
     standardsActor: standardsRun?.actor as string | undefined,
     specActor: specRun?.actor as string | undefined,
+    requireVerifiedEffectiveThinking: value.requestedOutcome === "completed",
   });
 
   const diversity = value.diversity as Record<string, unknown>;
   const level = diversity.achievedIndependence;
   if (typeof level !== "string" || !["provider-distinct", "provider-overlap", "axis-missing", "combined", "self-review", "unknown"].includes(level)) return failure("malformed-envelope", "achievedIndependence is invalid.", "diversity.achievedIndependence");
-  if (level !== derivedIndependence) return failure("invalid-provider-diversity", "achievedIndependence must match producer and review provenance.", "diversity.achievedIndependence");
+  if (level !== derivedIndependence) return failure("invalid-provider-diversity", "achievedIndependence must match actual producer and review provenance.", "diversity.achievedIndependence");
   if (diversity.degraded !== (level !== "provider-distinct")) return failure("invalid-provider-diversity", "Non-distinct provider topology must be explicitly degraded.", "diversity.degraded");
-  if (diversity.degraded && (!object(diversity.warning) || !object(diversity.acknowledgment))) return failure("invalid-provider-diversity", "Degraded topology requires warning and acknowledgment.", "diversity");
+  if (value.requestedOutcome === "completed" && (typeof diversity.cleanPilotEvidence !== "boolean" || diversity.cleanPilotEvidence !== (level === "provider-distinct" && diversity.degraded === false))) return failure("invalid-provider-diversity", "cleanPilotEvidence must exactly reflect verified provider-distinct provenance.", "diversity.cleanPilotEvidence");
+  if (value.requestedOutcome !== "completed" && diversity.cleanPilotEvidence !== undefined && (typeof diversity.cleanPilotEvidence !== "boolean" || diversity.cleanPilotEvidence !== (level === "provider-distinct" && diversity.degraded === false))) return failure("invalid-provider-diversity", "cleanPilotEvidence must exactly reflect verified provider-distinct provenance.", "diversity.cleanPilotEvidence");
+  if (diversity.degraded && (!object(diversity.warning) || !object(diversity.acknowledgment) || diversity.acknowledgment.decision !== "continue")) return failure("invalid-provider-diversity", "Degraded topology requires a complete warning and explicit continue acknowledgment.", "diversity");
 
   const childActors = [...(value.runs as Record<string, unknown>[]), ...reviews.map((review) => review.run as Record<string, unknown>)].filter((run) => run.role !== "parent").map((run) => run.actor);
   if (childActors.includes(gate.actor)) return failure("invalid-parent-gate", "Parent gate actor must not be a producer, reviewer, or fix-writer.", "parentGate.actor");
+  if ((value.dispositions as Record<string, unknown>[]).some((disposition) => childActors.includes(disposition.parentActor as string))) return failure("invalid-finding-disposition", "Finding dispositions must be independently recorded parent actions.", "dispositions");
+
+  if (value.requestedOutcome === "completed") {
+    const implementation = value.implementation as Record<string, unknown>;
+    const fingerprint = implementation.fingerprint as string;
+    const lease = value.writerLease as Record<string, unknown>;
+    if (lease.phase !== "closed" || !nonEmpty(lease.closedAt) || lease.handoffFingerprint !== fingerprint) return failure("invalid-review-integrity", "Completion requires a closed writer lease with a stable parent-observed handoff fingerprint.", "writerLease");
+    const finalReviews = value.reviews as Record<string, unknown>[];
+    const parentValidation = value.parentValidation as Record<string, unknown>[];
+    if (gate.action !== "accepted" || gate.observedFingerprint !== fingerprint || parentValidation.length === 0 || parentValidation.some((validation) => validation.outcome !== "passed" || validation.observedFingerprint !== fingerprint)) return failure("invalid-review-integrity", "Completion requires an accepted parent gate and passing parent validation against the stable implementation.", "parentValidation");
+    if (finalReviews.length !== 2 || new Set(finalReviews.map((review) => review.axis)).size !== 2) return failure("invalid-review-integrity", "Completion requires exactly one separate Standards and one separate Spec review.", "reviews");
+    if (finalReviews.some((review) => review.reviewedFingerprint !== fingerprint || (review.run as Record<string, unknown>).contextMode !== "fresh")) return failure("invalid-review-integrity", "Each review must be fresh and tied to the stable implementation handoff.", "reviews");
+    if (finalReviews.some((review) => review.verdict === "unable-to-review")) return failure("invalid-review-integrity", "An unable-to-review axis cannot authorize completion.", "reviews");
+    const reviewerRunIds = finalReviews.map((review) => (review.run as Record<string, unknown>).runId);
+    if (new Set(reviewerRunIds).size !== 2) return failure("invalid-review-integrity", "Review axes require separate review calls.", "reviews");
+    for (const [index, review] of finalReviews.entries()) {
+      const sealing = review.sealing;
+      if (!validReviewerSeal(sealing)) return failure("invalid-review-integrity", "Each reviewer requires capability sealing or serialized mutation evidence.", `reviews.${index}.sealing`);
+      if (object(sealing) && sealing.mode === "capability" && (sealing.readOnlyCapabilities as string[]).some((capability) => /(?:write|edit|mutat|stage|commit|shell|bash)/i.test(capability))) return failure("invalid-review-integrity", "Capability sealing cannot declare mutation-capable tools.", `reviews.${index}.sealing.readOnlyCapabilities`);
+      if (object(sealing) && sealing.mode === "serialized" && (sealing.preMutationFingerprint !== fingerprint || sealing.postMutationFingerprint !== fingerprint)) return failure("invalid-review-integrity", "Serialized reviewer mutation evidence must match the stable implementation before and after review.", `reviews.${index}.sealing`);
+    }
+    if (["axis-missing", "combined", "self-review"].includes(level)) return failure("invalid-review-integrity", "Missing, combined, or self-review cannot use the diversity degradation exception.", "diversity.achievedIndependence");
+    const findingIds = finalReviews.flatMap((review) => (review.findings as Record<string, unknown>[]).map((finding) => finding.id as string));
+    const dispositionIds = (value.dispositions as Record<string, unknown>[]).map((disposition) => disposition.findingId as string);
+    if (new Set(findingIds).size !== findingIds.length || new Set(dispositionIds).size !== dispositionIds.length || findingIds.length !== dispositionIds.length || findingIds.some((id) => !dispositionIds.includes(id))) return failure("invalid-finding-disposition", "Every and only review finding requires one parent disposition.", "dispositions");
+  }
 
   return { ok: true, value: value as TeamOrchestrationEnvelopeV1 };
 }
