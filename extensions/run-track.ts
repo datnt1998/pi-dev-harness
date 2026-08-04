@@ -35,8 +35,21 @@ export const RUN_TRACK_ENTRY_TYPE = RUN_TRACK_NAMESPACE;
 /** Model-callable tool name (self-attested evidence only). */
 export const RUN_TRACK_EVIDENCE_TOOL = "run_track_record_evidence";
 
+/**
+ * Operator-only interactive acknowledgment command (NOT a model tool).
+ * Slash form: `/run-track-ack <action> [occurrenceId]`
+ */
+export const RUN_TRACK_ACK_COMMAND = "run-track-ack";
+
 type AppendPi = { appendEntry: (customType: string, data?: unknown) => void };
 type BranchCtx = { sessionManager: { getBranch: () => readonly unknown[]; getSessionId?: () => string } };
+
+/** Context needed for operator-gated acknowledgment (mode is authoritative). */
+export type OperatorAckContext = BranchCtx & {
+  mode?: string;
+  hasUI?: boolean;
+  ui?: { notify?: (message: string, level?: string) => void };
+};
 
 export type RunTrackToolResult = {
   content: Array<{ type: "text"; text: string }>;
@@ -67,6 +80,23 @@ export type ConsultEvidenceTransitionResult = {
   projection: RunTrackProjection;
   /** Kind appended this call, if any. */
   appendedKind: "guardrail.occurred" | "task.transition-observed" | null;
+  error?: string;
+};
+
+export type AcknowledgeGuardrailInput = {
+  /** Evidence-transition action bound on the pause occurrence. */
+  action: string;
+  /** Optional explicit occurrence id; otherwise the latest matching pause is used. */
+  occurrenceId?: string;
+};
+
+export type AcknowledgeGuardrailResult = {
+  ok: boolean;
+  /** True only when a durable guardrail.acknowledged event was appended. */
+  appended: boolean;
+  projection: RunTrackProjection;
+  receipt: RunTrackReceipt;
+  acknowledgmentId?: string;
   error?: string;
 };
 
@@ -400,6 +430,191 @@ export function consultEvidenceTransition(
   };
 }
 
+function parseAckCommandArgs(args: string): { action: string; occurrenceId?: string } | { error: string } {
+  const parts = args.trim().split(/\s+/).filter(Boolean);
+  if (parts.length === 0) {
+    return { error: `usage: /${RUN_TRACK_ACK_COMMAND} <action> [occurrenceId]` };
+  }
+  if (parts.length > 2) {
+    return { error: `usage: /${RUN_TRACK_ACK_COMMAND} <action> [occurrenceId]` };
+  }
+  const action = parts[0]!;
+  const occurrenceId = parts[1];
+  return occurrenceId ? { action, occurrenceId } : { action };
+}
+
+/**
+ * Operator-interactive acknowledgment path (internal seam + command handler).
+ *
+ * Hard gates:
+ * - Only `ctx.mode === "tui"` may append. RPC/JSON/print/headless/unattended are
+ *   rejected with no journal mutation. `hasUI` alone is NOT operator identity
+ *   (RPC reports hasUI=true).
+ * - Binds to an existing pause `guardrail.occurred` on the active branch with
+ *   exact action, policyVersion, and CURRENT factsDigest. Changed facts make a
+ *   prior occurrence/ack binding stale.
+ * - Origin is hard-coded `operator-interactive`. Callers cannot mint origin,
+ *   trust, or lineage through this seam. Not exposed as a model tool.
+ */
+export function acknowledgeGuardrailOccurrence(
+  pi: AppendPi,
+  ctx: OperatorAckContext,
+  input: AcknowledgeGuardrailInput,
+): AcknowledgeGuardrailResult {
+  // Mode is the sole operator-identity gate. Do not trust hasUI or caller fields.
+  if (ctx.mode !== "tui") {
+    const projection = projectRunTrackContext(ctx);
+    return {
+      ok: false,
+      appended: false,
+      projection,
+      receipt: createRunTrackReceipt(projection),
+      error: `operator acknowledgment requires interactive tui mode (got ${String(ctx.mode ?? "unknown")})`,
+    };
+  }
+
+  const projection = projectRunTrackContext(ctx);
+  const baseReceipt = createRunTrackReceipt(projection);
+
+  if (!projection.healthy) {
+    return {
+      ok: false,
+      appended: false,
+      projection,
+      receipt: baseReceipt,
+      error: "active branch contains malformed run-track events",
+    };
+  }
+
+  if (projection.trackId === null || projection.factsDigest === null) {
+    return {
+      ok: false,
+      appended: false,
+      projection,
+      receipt: baseReceipt,
+      error: "no active run-track task on branch",
+    };
+  }
+
+  if (typeof input.action !== "string" || input.action.length === 0) {
+    return {
+      ok: false,
+      appended: false,
+      projection,
+      receipt: baseReceipt,
+      error: "acknowledgment action is required",
+    };
+  }
+
+  const currentDigest = projection.factsDigest;
+  const matches = projection.occurrences.filter((occ) => {
+    if (occ.action !== input.action) return false;
+    if (occ.policyVersion !== RUN_TRACK_POLICY_VERSION) return false;
+    // Bind to CURRENT facts only — changed facts stale any prior occurrence.
+    if (occ.factsDigest !== currentDigest) return false;
+    // Only soft pauses are acknowledgeable (core planEvidenceTransition rule).
+    if (occ.decision !== "pause") return false;
+    if (typeof input.occurrenceId === "string" && input.occurrenceId.length > 0) {
+      return occ.occurrenceId === input.occurrenceId;
+    }
+    return true;
+  });
+
+  if (matches.length === 0) {
+    return {
+      ok: false,
+      appended: false,
+      projection,
+      receipt: baseReceipt,
+      error:
+        typeof input.occurrenceId === "string" && input.occurrenceId.length > 0
+          ? "no matching guardrail.occurred pause for action/occurrence/policy/current facts"
+          : "no matching guardrail.occurred pause for action/policy/current facts",
+    };
+  }
+
+  // Latest matching occurrence preserves pre-transition ordering by construction
+  // (ack is appended after the occurrence already on the branch).
+  const occurrence = matches[matches.length - 1]!;
+
+  const event = {
+    v: RUN_TRACK_VERSION,
+    ns: RUN_TRACK_NAMESPACE,
+    kind: "guardrail.acknowledged" as const,
+    id: newToken("evt"),
+    ts: nowIso(),
+    trackId: projection.trackId,
+    occurrenceId: occurrence.occurrenceId,
+    action: occurrence.action,
+    policyVersion: occurrence.policyVersion,
+    factsDigest: currentDigest,
+    // Hard-coded: no model tool / RPC args can mint a different origin.
+    origin: "operator-interactive" as const,
+  };
+
+  const appended = appendRunTrackEvent(pi, event);
+  if (!appended.ok) {
+    return {
+      ok: false,
+      appended: false,
+      projection,
+      receipt: baseReceipt,
+      error: appended.error,
+    };
+  }
+
+  const next = projectRunTrackContext(ctx);
+  return {
+    ok: true,
+    appended: true,
+    projection: next,
+    receipt: createRunTrackReceipt(next),
+    acknowledgmentId: appended.event.id,
+  };
+}
+
+/**
+ * Install the operator acknowledgment slash command when the host supports it.
+ * Feature-detected so unit-test fakes that only implement tool registration
+ * still load; real hosts register the interactive operator command.
+ */
+function installOperatorAckCommand(pi: ExtensionAPI): void {
+  if (typeof pi.registerCommand !== "function") return;
+
+  pi.registerCommand(RUN_TRACK_ACK_COMMAND, {
+    description:
+      "Acknowledge a paused Run Track guardrail occurrence (interactive TUI operator only). Usage: <action> [occurrenceId]",
+    handler: async (args: string, ctx: ExtensionContext) => {
+      const parsed = parseAckCommandArgs(args);
+      if ("error" in parsed) {
+        try {
+          ctx.ui.notify(parsed.error, "error");
+        } catch {
+          // Stale ctx — ignore.
+        }
+        return;
+      }
+
+      reconstruct(ctx);
+      const result = acknowledgeGuardrailOccurrence(pi, ctx, parsed);
+      setStatus(ctx, result.projection);
+
+      try {
+        if (!result.ok) {
+          ctx.ui.notify(`Run Track ack rejected: ${result.error}`, "error");
+          return;
+        }
+        ctx.ui.notify(
+          receiptText("Run Track guardrail acknowledged.", result.receipt),
+          "info",
+        );
+      } catch {
+        // Stale ctx after fork/reload — ignore.
+      }
+    },
+  });
+}
+
 function setStatus(ctx: ExtensionContext, projection: RunTrackProjection): void {
   if (ctx.mode !== "tui") return;
   try {
@@ -430,6 +645,9 @@ export default function runTrack(pi: ExtensionAPI): void {
   pi.on("session_tree", (_event, ctx) => {
     reconstruct(ctx);
   });
+
+  // Operator-only acknowledgment command (not a model-callable tool).
+  installOperatorAckCommand(pi);
 
   pi.registerTool({
     name: RUN_TRACK_EVIDENCE_TOOL,

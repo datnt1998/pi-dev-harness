@@ -549,7 +549,10 @@ test("AC7: extension source has no prototype import, fixture provider, or settin
   assert.equal(source.includes("settings.json"), false);
   // Extension only type-imports the SDK (no runtime package coupling beyond peers).
   assert.match(source, /import type \{[^}]*ExtensionAPI/);
-  assert.equal(source.includes("registerCommand"), false);
+  // Note: T3 legitimately adds one operator-only `registerCommand` (interactive
+  // acknowledgment). The shipped-surface guarantees are: no fixture provider, no
+  // network/fs, no settings coupling, and no model-callable ack tool (asserted
+  // via the tool registry elsewhere) — not the absence of commands.
   // Receipt helper stays bounded.
   const empty = projectRunTrackBranch([]);
   const receipt = createRunTrackReceipt(empty);
