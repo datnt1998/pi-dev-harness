@@ -12,7 +12,24 @@ function report(source: string, sourceFingerprint: string, outcome: "completed" 
     protocolVersion: 1,
     workUnit: { source, sourceFingerprint, ticketId: "T1", purpose: "extension gate", attempt: 1 },
     runs: [{ role: "producer", actor: "writer", runId: "writer-1", contextMode: "fresh", acceptanceMode: "checked", provider: { provider: "one", fallback: false, effectiveModel: "verified", effectiveThinking: "verified" } }],
-    writerLease: { owner: "writer", phase: "closed", allowedPaths: ["lib/x.ts"], openedAt: "2026-01-01", closedAt: "2026-01-01", handoffFingerprint: "impl" },
+    eligibility: {
+      lane: "parent",
+      reasonCode: "tiny-known-parent",
+      rule: "tiny known diffs stay on the parent writer lane",
+      architectureFrozen: true,
+      scopeExplicit: true,
+      reversible: true,
+      falsifiableBar: "node --test",
+      validationAvailable: true,
+      freshContext: true,
+      checkedAcceptance: true,
+      pilotMember: false,
+      allowedPaths: ["lib/x.ts"],
+      importantReasoning: "none",
+      tinyKnownDiff: true,
+      leaseSafetyAvailable: true,
+    },
+    writerLease: { leaseId: "lease-1", ticketId: "T1", attempt: 1, worktreeKey: "active", owner: "writer", ownerRole: "parent", phase: "closed", allowedPaths: ["lib/x.ts"], openedAt: "2026-01-01", closedAt: "2026-01-01", handoffFingerprint: "impl" },
     implementation: { changedPaths: ["lib/x.ts"], fingerprint: "impl" },
     producerObservations: [{ summary: "observation", locators: ["log:1"], replayCommands: ["node --test"] }],
     parentValidation: [{ command: "node --test", outcome: outcome === "completed" ? "passed" : "failed", locator: "log:2", observedFingerprint: "impl" }],
@@ -58,10 +75,25 @@ test("real batch_report rejects prose then accepts structured active completion"
     for (const handler of pi.handlers.session_start) handler({}, ctx);
     const prose = await pi.tools.batch_report.execute("x", { id: "T1", outcome: "completed", report: { note: "done" } }, undefined, undefined, ctx);
     assert.match(prose.content[0].text, /Outcome rejected/);
+    const selfAsserted = await pi.tools.batch_report.execute("x", { id: "T1", outcome: "completed", report: report(source, fingerprint(raw)) }, undefined, undefined, ctx);
+    assert.match(selfAsserted.content[0].text, /Outcome rejected/);
+    assert.match(selfAsserted.content[0].text, /Self-asserted closed writer lease/);
+    const acquired = await pi.tools.batch_writer_lease.execute("x", {
+      action: "acquire", leaseId: "lease-1", owner: "writer", ownerRole: "parent", phase: "implementation",
+      worktreeKey: "active", allowedPaths: ["lib/x.ts"], openedAt: "2026-01-01", implementationScopePaths: ["lib/x.ts"],
+    }, undefined, undefined, ctx);
+    assert.match(acquired.content[0].text, /Acquired writer lease lease-1/);
+    const closed = await pi.tools.batch_writer_lease.execute("x", {
+      action: "close", leaseId: "lease-1", owner: "writer", closedAt: "2026-01-01", handoffFingerprint: "impl",
+    }, undefined, undefined, ctx);
+    assert.match(closed.content[0].text, /Closed writer lease lease-1/);
+    const review = await pi.tools.batch_writer_lease.execute("x", { action: "review_allowed" }, undefined, undefined, ctx);
+    assert.match(review.content[0].text, /Review allowed/);
     const valid = await pi.tools.batch_report.execute("x", { id: "T1", outcome: "completed", report: report(source, fingerprint(raw)) }, undefined, undefined, ctx);
     assert.match(valid.content[0].text, /Recorded T1 → completed/);
     const latest = pi.entries.at(-1) as any;
     assert.equal(latest.data.tickets[0].status, "completed");
+    assert.equal(latest.data.writerLeaseHistory?.some((lease: any) => lease.leaseId === "lease-1"), true);
 
     // batch_next uses the real registered tool and sees the completed terminal batch.
     const next = await pi.tools.batch_next.execute("x", {}, undefined, undefined, ctx);
@@ -69,7 +101,7 @@ test("real batch_report rejects prose then accepts structured active completion"
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });
 
-test("extension restores the latest valid cloned snapshot and ignores malformed newer entries", async () => {
+test("extension fails closed on the latest malformed snapshot instead of rolling back", async () => {
   const dir = mkdtempSync(join(tmpdir(), "ticket-runner-"));
   try {
     const source = join(dir, "tickets.md"); const raw = "# tickets\n"; writeFileSync(source, raw);
@@ -79,13 +111,27 @@ test("extension restores the latest valid cloned snapshot and ignores malformed 
     pi.entries.push({ type: "custom", customType: "ticket-batch-state", data: { version: 1, malformed: true } });
     ticketRunner(pi as never); const ctx = context(dir, pi);
     for (const handler of pi.handlers.session_start) handler({}, ctx);
-    const accepted = await pi.tools.batch_report.execute("x", { id: "T1", outcome: "retry", report: report(source, fingerprint(raw), "retry") }, undefined, undefined, ctx);
-    assert.match(accepted.content[0].text, /Recorded T1 → queued/);
-    const persisted = pi.entries.at(-1).data;
-    assert.equal(persisted.tickets[0].evidence.pendingEvidence.requestedOutcome, "retry");
-    // Mutating the historical seed cannot mutate the persisted reconstructed state.
-    state.tickets[0].status = "failed";
-    assert.equal(persisted.tickets[0].status, "queued");
+    const rejected = await pi.tools.batch_report.execute("x", { id: "T1", outcome: "retry", report: report(source, fingerprint(raw), "retry") }, undefined, undefined, ctx);
+    assert.match(rejected.content[0].text, /No active ticket batch/);
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
+test("extension stops on a corrupt newest lease snapshot instead of resuming an older state", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "ticket-runner-"));
+  try {
+    const source = join(dir, "tickets.md"); const raw = "# tickets\n"; writeFileSync(source, raw);
+    const older = createRunState({ batchId: "b", source, fingerprint: fingerprint(raw), order: ["T1"], tickets: [{ id: "T1", dependencies: [] }], now: 1 });
+    startTicket(older, "T1");
+    const corrupt = structuredClone(older) as any;
+    corrupt.activeWriterLease = { leaseId: "lease-1", worktreeKey: "active", owner: "writer", ownerRole: "parent", phase: "implementation", ticketId: "T1", attempt: 1, allowedPaths: ["lib/x.ts"], openedAt: "2026-01-01" };
+    corrupt.tickets[0].status = "queued";
+    const pi = fakePi();
+    pi.entries.push({ type: "custom", customType: "ticket-batch-state", data: older });
+    pi.entries.push({ type: "custom", customType: "ticket-batch-state", data: corrupt });
+    ticketRunner(pi as never); const ctx = context(dir, pi);
+    for (const handler of pi.handlers.session_start) handler({}, ctx);
+    const next = await pi.tools.batch_next.execute("x", {}, undefined, undefined, ctx);
+    assert.match(next.content[0].text, /No active ticket batch/);
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });
 
@@ -115,20 +161,60 @@ test("extension rejects wrong active id and source changes while accepting struc
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });
 
-test("batch_next coaching requires stable sealed two-axis evidence", async () => {
+test("batch_next coaching requires eligibility, exclusive lease, sealed two-axis evidence, and one fix round", async () => {
   const dir = mkdtempSync(join(tmpdir(), "ticket-runner-"));
   try {
     const source = join(dir, "tickets.md"); writeFileSync(source, "# tickets\n");
     const state = createRunState({ batchId: "coaching", source, fingerprint: fingerprint("# tickets\n"), order: ["T1"], tickets: [{ id: "T1", dependencies: [] }], now: 1 });
     const pi = fakePi(); pi.entries.push({ type: "custom", customType: "ticket-batch-state", data: structuredClone(state) }); ticketRunner(pi as never); const ctx = context(dir, pi);
     for (const handler of pi.handlers.session_start) handler({}, ctx);
+    assert.ok(pi.tools.batch_writer_lease);
     const first = await pi.tools.batch_next.execute("x", {}, undefined, undefined, ctx);
+    assert.match(first.content[0].text, /eligibility/);
+    assert.match(first.content[0].text, /batch_writer_lease/);
+    assert.match(first.content[0].text, /writer lease/);
     assert.match(first.content[0].text, /stable writer handoff/);
     assert.match(first.content[0].text, /Standards and Spec/);
     assert.match(first.content[0].text, /degradation acknowledgment/);
+    assert.match(first.content[0].text, /one bounded fix/);
     const resumed = await pi.tools.batch_next.execute("x", {}, undefined, undefined, ctx);
-    assert.match(resumed.content[0].text, /stable writer handoff/);
+    assert.match(resumed.content[0].text, /writer lease/);
     assert.match(resumed.content[0].text, /Standards and Spec/);
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
+test("extension lease lifecycle persists acquire/close and rejects open-lease review plus self-asserted completion", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "ticket-runner-"));
+  try {
+    const source = join(dir, "tickets.md"); const raw = "# tickets\n"; writeFileSync(source, raw);
+    const state = createRunState({ batchId: "lease", source, fingerprint: fingerprint(raw), order: ["T1"], tickets: [{ id: "T1", dependencies: [] }], now: 1 });
+    startTicket(state, "T1");
+    const pi = fakePi(); pi.entries.push({ type: "custom", customType: "ticket-batch-state", data: structuredClone(state) });
+    ticketRunner(pi as never); const ctx = context(dir, pi);
+    for (const handler of pi.handlers.session_start) handler({}, ctx);
+
+    const acquired = await pi.tools.batch_writer_lease.execute("x", {
+      action: "acquire", leaseId: "lease-1", owner: "writer", ownerRole: "parent", phase: "implementation",
+      worktreeKey: "active", allowedPaths: ["lib/x.ts"], openedAt: "2026-01-01",
+    }, undefined, undefined, ctx);
+    assert.match(acquired.content[0].text, /Acquired writer lease/);
+    const blockedReview = await pi.tools.batch_writer_lease.execute("x", { action: "review_allowed" }, undefined, undefined, ctx);
+    assert.match(blockedReview.content[0].text, /Review not allowed/);
+    const persistedOpen = (pi.entries.at(-1) as any).data;
+    assert.equal(persistedOpen.activeWriterLease.leaseId, "lease-1");
+
+    // Reconstruct from persisted open lease and close it.
+    for (const handler of pi.handlers.session_start) handler({}, ctx);
+    const closed = await pi.tools.batch_writer_lease.execute("x", {
+      action: "close", leaseId: "lease-1", owner: "writer", closedAt: "2026-01-01", handoffFingerprint: "impl",
+    }, undefined, undefined, ctx);
+    assert.match(closed.content[0].text, /Closed writer lease/);
+    assert.equal(closed.details.writerLeaseHistory.some((lease: any) => lease.leaseId === "lease-1"), true);
+
+    const allowed = await pi.tools.batch_writer_lease.execute("x", { action: "review_allowed" }, undefined, undefined, ctx);
+    assert.match(allowed.content[0].text, /Review allowed/);
+    const reported = await pi.tools.batch_report.execute("x", { id: "T1", outcome: "completed", report: report(source, fingerprint(raw)) }, undefined, undefined, ctx);
+    assert.match(reported.content[0].text, /Recorded T1 → completed/);
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });
 

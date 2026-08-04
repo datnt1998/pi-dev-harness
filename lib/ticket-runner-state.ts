@@ -15,12 +15,21 @@ export type TicketOutcome =
   | "needs_decision";
 
 import {
+  acquireExclusiveWriterLease,
+  canStartReviewAgainstLease,
+  closeExclusiveWriterLease,
   decisionPacketEquivalenceKey,
+  inspectPersistedWriterLease,
   isDecisionPacket,
   parseTeamOrchestrationEnvelope,
+  type ActiveWriterLease,
   type DecisionPacket,
+  type FixBriefEvidence,
+  type FindingDispositionEvidence,
+  type LeaseOpFailureCode,
   type RequestedOutcome,
   type TeamOrchestrationEnvelopeV1,
+  type WriterLeaseEvidence,
 } from "./team-orchestration-protocol.ts";
 
 export type AcceptedReportRecord = {
@@ -66,6 +75,15 @@ export type BatchRunState = {
   tickets: RunTicket[];
   /** Canonical replayable owner decisions, deduplicated by structural evidence. */
   decisionIndex?: DecisionIndexEntry[];
+  /** At most one exclusive open writer lease for the active worktree. */
+  activeWriterLease?: ActiveWriterLease;
+  /** Closed handoff evidence retained across resume until the next acquire. */
+  lastClosedWriterLease?: WriterLeaseEvidence;
+  /**
+   * Append-only closed lease handoffs for the batch. Preserves implementation then
+   * at most one fix phase proof across resume/reconstruction.
+   */
+  writerLeaseHistory?: WriterLeaseEvidence[];
   createdAt: number;
   updatedAt: number;
 };
@@ -148,6 +166,40 @@ function isBatchRunStateUnchecked(value: unknown): value is BatchRunState {
     ids.add(ticket.id);
   }
   if (inProgress > 1 || state.order.length !== ids.size || !state.order.every((id) => ids.has(id))) return false;
+  if (state.activeWriterLease !== undefined) {
+    const lease = state.activeWriterLease;
+    if (!lease || typeof lease !== "object" || typeof lease.leaseId !== "string" || typeof lease.worktreeKey !== "string"
+      || typeof lease.owner !== "string" || !["parent", "worker", "fix-writer"].includes(lease.ownerRole)
+      || !["implementation", "fix"].includes(lease.phase) || typeof lease.ticketId !== "string" || !ids.has(lease.ticketId)
+      || !Number.isInteger(lease.attempt) || lease.attempt < 1
+      || !Array.isArray(lease.allowedPaths) || !lease.allowedPaths.every((path) => typeof path === "string" && path.trim().length > 0)
+      || lease.allowedPaths.length === 0 || typeof lease.openedAt !== "string"
+      || (lease.fixBriefId !== undefined && typeof lease.fixBriefId !== "string")) return false;
+    // Orphaned/contradictory open leases fail closed before reconstruction/scheduling.
+    const ticket = state.tickets.find((item) => item.id === lease.ticketId);
+    if (!ticket || ticket.status !== "in_progress" || ticket.attempts !== lease.attempt) return false;
+    if (inProgress !== 1) return false;
+  }
+  if (state.lastClosedWriterLease !== undefined) {
+    const lease = state.lastClosedWriterLease;
+    if (!isClosedLeaseEvidence(lease)) return false;
+  }
+  if (state.writerLeaseHistory !== undefined) {
+    if (!Array.isArray(state.writerLeaseHistory) || !state.writerLeaseHistory.every(isClosedLeaseEvidence)) return false;
+    if (state.lastClosedWriterLease !== undefined) {
+      const tip = state.writerLeaseHistory[state.writerLeaseHistory.length - 1];
+      if (!tip || tip.leaseId !== state.lastClosedWriterLease.leaseId || tip.ticketId !== state.lastClosedWriterLease.ticketId
+        || tip.attempt !== state.lastClosedWriterLease.attempt || tip.closedAt !== state.lastClosedWriterLease.closedAt
+        || tip.handoffFingerprint !== state.lastClosedWriterLease.handoffFingerprint) return false;
+    }
+    const fixRoundsByAttempt = new Map<string, number>();
+    for (const lease of state.writerLeaseHistory.filter((entry) => entry.ownerRole === "fix-writer")) {
+      const key = `${lease.ticketId}:${lease.attempt}`;
+      const count = (fixRoundsByAttempt.get(key) ?? 0) + 1;
+      if (count > 1) return false;
+      fixRoundsByAttempt.set(key, count);
+    }
+  }
   if (state.decisionIndex !== undefined) {
     if (!Array.isArray(state.decisionIndex)) return false;
     const indexedPackets = new Map<string, DecisionPacket>();
@@ -169,6 +221,44 @@ function isBatchRunStateUnchecked(value: unknown): value is BatchRunState {
     }
   }
   return state.tickets.every((ticket) => ticket.dependencies.every((id) => id !== ticket.id && ids.has(id)));
+}
+
+function isClosedLeaseEvidence(lease: unknown): lease is WriterLeaseEvidence {
+  return !!lease && typeof lease === "object" && typeof (lease as WriterLeaseEvidence).leaseId === "string"
+    && typeof (lease as WriterLeaseEvidence).ticketId === "string"
+    && Number.isInteger((lease as WriterLeaseEvidence).attempt) && (lease as WriterLeaseEvidence).attempt > 0
+    && typeof (lease as WriterLeaseEvidence).worktreeKey === "string"
+    && typeof (lease as WriterLeaseEvidence).owner === "string"
+    && ["parent", "worker", "fix-writer"].includes((lease as WriterLeaseEvidence).ownerRole)
+    && (lease as WriterLeaseEvidence).phase === "closed"
+    && Array.isArray((lease as WriterLeaseEvidence).allowedPaths)
+    && (lease as WriterLeaseEvidence).allowedPaths.every((path) => typeof path === "string" && path.trim().length > 0)
+    && (lease as WriterLeaseEvidence).allowedPaths.length > 0
+    && typeof (lease as WriterLeaseEvidence).openedAt === "string"
+    && typeof (lease as WriterLeaseEvidence).closedAt === "string"
+    && typeof (lease as WriterLeaseEvidence).handoffFingerprint === "string"
+    && ((lease as WriterLeaseEvidence).fixBriefId === undefined || typeof (lease as WriterLeaseEvidence).fixBriefId === "string");
+}
+
+function closedLeaseMatches(reportLease: WriterLeaseEvidence, recorded: WriterLeaseEvidence): boolean {
+  return recorded.leaseId === reportLease.leaseId
+    && recorded.ticketId === reportLease.ticketId
+    && recorded.attempt === reportLease.attempt
+    && recorded.owner === reportLease.owner
+    && recorded.ownerRole === reportLease.ownerRole
+    && recorded.worktreeKey === reportLease.worktreeKey
+    && recorded.handoffFingerprint === reportLease.handoffFingerprint
+    && recorded.closedAt === reportLease.closedAt
+    && recorded.fixBriefId === reportLease.fixBriefId;
+}
+
+function appendClosedLeaseHistory(state: BatchRunState, closed: WriterLeaseEvidence): void {
+  const history = [...(state.writerLeaseHistory ?? [])];
+  const already = history.some((entry) => entry.leaseId === closed.leaseId && entry.ticketId === closed.ticketId && entry.attempt === closed.attempt
+    && entry.closedAt === closed.closedAt && entry.handoffFingerprint === closed.handoffFingerprint);
+  if (!already) history.push(structuredClone(closed));
+  state.writerLeaseHistory = history;
+  state.lastClosedWriterLease = structuredClone(closed);
 }
 
 export function createRunState(input: CreateRunInput): BatchRunState {
@@ -304,6 +394,74 @@ function sameAxes(reviews: TeamOrchestrationEnvelopeV1["reviews"], fingerprint: 
     && reviews.every((review) => review.reviewedFingerprint === fingerprint);
 }
 
+export type WriterLeaseMutationResult =
+  | { ok: true; state: BatchRunState; lease?: ActiveWriterLease; closed?: WriterLeaseEvidence }
+  | { ok: false; error: { code: LeaseOpFailureCode | "invalid-transition"; message: string } };
+
+/** Acquire the exclusive worktree writer lease for the in-progress ticket. */
+export function acquireBatchWriterLease(
+  state: BatchRunState,
+  request: ActiveWriterLease,
+  context: {
+    dispositions?: FindingDispositionEvidence[];
+    fixBrief?: FixBriefEvidence;
+    priorFixRounds?: number;
+    implementationScopePaths?: string[];
+  } = {},
+): WriterLeaseMutationResult {
+  const active = inProgressTicket(state);
+  if (!active) return { ok: false, error: { code: "invalid-transition", message: "A writer lease requires an in-progress ticket." } };
+  const inspection = inspectPersistedWriterLease(state.activeWriterLease, {
+    ticketStatuses: Object.fromEntries(state.tickets.map((ticket) => [ticket.id, ticket.status])),
+    inProgressTicketId: active.id,
+  });
+  if (!inspection.ok) return { ok: false, error: inspection.error };
+  const priorFixRounds = context.priorFixRounds ?? (state.writerLeaseHistory ?? []).filter((lease) => lease.ownerRole === "fix-writer" && lease.ticketId === active.id && lease.attempt === active.attempts).length;
+  const acquired = acquireExclusiveWriterLease(state.activeWriterLease, { ...request, ticketId: request.ticketId || active.id, attempt: request.attempt || active.attempts }, {
+    inProgressTicketId: active.id,
+    dispositions: context.dispositions,
+    fixBrief: context.fixBrief,
+    priorFixRounds,
+    implementationScopePaths: context.implementationScopePaths,
+  });
+  if (!acquired.ok) return { ok: false, error: acquired.error };
+  if (acquired.value.ticketId !== active.id) return { ok: false, error: { code: "stale", message: "Lease ticket does not match the active in-progress work unit." } };
+  state.activeWriterLease = acquired.value;
+  state.updatedAt = Date.now();
+  return { ok: true, state, lease: acquired.value };
+}
+
+/** Close/handoff the exclusive lease and retain closed evidence for resume. */
+export function closeBatchWriterLease(
+  state: BatchRunState,
+  input: { leaseId: string; owner: string; closedAt: string; handoffFingerprint: string },
+): WriterLeaseMutationResult {
+  const closed = closeExclusiveWriterLease(state.activeWriterLease, input);
+  if (!closed.ok) return { ok: false, error: closed.error };
+  appendClosedLeaseHistory(state, closed.value);
+  delete state.activeWriterLease;
+  state.updatedAt = Date.now();
+  return { ok: true, state, closed: closed.value };
+}
+
+/** Review is prohibited while any writer lease is open. */
+export function assertBatchReviewAllowed(state: BatchRunState): { ok: true } | { ok: false; error: { code: LeaseOpFailureCode; message: string } } {
+  const allowed = canStartReviewAgainstLease(state.activeWriterLease);
+  if (!allowed.ok) return { ok: false, error: { code: allowed.code, message: allowed.message } };
+  return { ok: true };
+}
+
+/** Fail closed when a resumed lease is orphaned or contradicts ticket progress. */
+export function reconcileBatchWriterLease(state: BatchRunState): { ok: true; lease?: ActiveWriterLease } | { ok: false; error: { code: LeaseOpFailureCode; message: string } } {
+  const active = inProgressTicket(state);
+  const inspection = inspectPersistedWriterLease(state.activeWriterLease, {
+    ticketStatuses: Object.fromEntries(state.tickets.map((ticket) => [ticket.id, ticket.status])),
+    inProgressTicketId: active?.id,
+  });
+  if (!inspection.ok) return { ok: false, error: inspection.error };
+  return { ok: true, lease: inspection.value };
+}
+
 function completionFailure(report: TeamOrchestrationEnvelopeV1): string | undefined {
   const fingerprint = report.implementation.fingerprint;
   if (report.writerLease.phase !== "closed" || !report.writerLease.closedAt) return "writer lease is not closed";
@@ -421,6 +579,65 @@ export function applyEvidencedOutcome(state: BatchRunState, id: string, reportVa
   else problem = failureEvidenceFailure(report);
   if (problem) return { ok: false, error: { code: outcome === "completed" ? "completed-evidence-incomplete" : outcome === "retry" ? "retry-evidence-incomplete" : outcome === "needs_decision" ? "needs-decision-evidence-incomplete" : "failure-evidence-incomplete", message: problem } };
 
+  // Leaving in_progress with an open lease would orphan mutation authority.
+  // Non-completed outcomes therefore require a safe closed handoff when a lease is open,
+  // and completed outcomes require a matching recorded lease (no self-asserted close).
+  let closedHandoff: WriterLeaseEvidence | undefined;
+  if (state.activeWriterLease) {
+    const leaseCheck = reconcileBatchWriterLease(state);
+    if (!leaseCheck.ok) return { ok: false, error: { code: "invalid-transition", message: `${leaseCheck.error.code}: ${leaseCheck.error.message}` } };
+    if (report.writerLease.phase !== "closed") {
+      return { ok: false, error: {
+        code: outcome === "completed" ? "completed-evidence-incomplete" : "invalid-transition",
+        message: "An open writer lease must be closed before the ticket leaves in_progress.",
+      } };
+    }
+    if (report.writerLease.leaseId !== state.activeWriterLease.leaseId || report.writerLease.owner !== state.activeWriterLease.owner) {
+      return { ok: false, error: { code: "invalid-report", message: "Report writer lease contradicts the active batch lease." } };
+    }
+    const closed = closeExclusiveWriterLease(state.activeWriterLease, {
+      leaseId: report.writerLease.leaseId,
+      owner: report.writerLease.owner,
+      closedAt: report.writerLease.closedAt!,
+      handoffFingerprint: report.writerLease.handoffFingerprint ?? report.implementation.fingerprint,
+    });
+    if (!closed.ok) return { ok: false, error: { code: "invalid-report", message: `${closed.error.code}: ${closed.error.message}` } };
+    if (report.writerLease.handoffFingerprint && report.writerLease.handoffFingerprint !== closed.value.handoffFingerprint) {
+      return { ok: false, error: { code: "invalid-report", message: "Report handoff fingerprint contradicts the closed lease handoff." } };
+    }
+    closedHandoff = closed.value;
+  } else if (report.writerLease.phase === "closed") {
+    const history = (state.writerLeaseHistory ?? (state.lastClosedWriterLease ? [state.lastClosedWriterLease] : []))
+      .filter((entry) => entry.ticketId === ticket.id && entry.attempt === ticket.attempts);
+    const match = history.find((entry) => closedLeaseMatches(report.writerLease, entry))
+      ?? (state.lastClosedWriterLease && closedLeaseMatches(report.writerLease, state.lastClosedWriterLease) ? state.lastClosedWriterLease : undefined);
+    if (match) {
+      closedHandoff = structuredClone(match);
+    } else if (outcome === "completed") {
+      // Completion cannot invent a closed handoff the runtime never recorded.
+      return { ok: false, error: {
+        code: "completed-evidence-incomplete",
+        message: "Self-asserted closed writer lease is not recorded in the batch lease lifecycle.",
+      } };
+    }
+  } else if (outcome === "completed") {
+    return { ok: false, error: { code: "completed-evidence-incomplete", message: "writer lease is not closed" } };
+  }
+
+  if (outcome === "completed" && report.fixAndRereview.fixApplied) {
+    const history = (state.writerLeaseHistory ?? []).filter((entry) => entry.ticketId === ticket.id && entry.attempt === ticket.attempts);
+    if (closedHandoff && !history.some((entry) => closedLeaseMatches(closedHandoff, entry))) history.push(closedHandoff);
+    const fixLease = report.fixAndRereview.fixLease;
+    if (!fixLease || !history.some((entry) => closedLeaseMatches(fixLease, entry))) {
+      return { ok: false, error: { code: "completed-evidence-incomplete", message: "fixApplied requires a recorded closed fix-writer lease tied to the fix brief." } };
+    }
+    const implementationClosed = history.some((entry) => entry.ownerRole !== "fix-writer" && entry.phase === "closed");
+    const fixClosedCount = history.filter((entry) => entry.ownerRole === "fix-writer" && entry.ticketId === ticket.id && entry.attempt === ticket.attempts).length;
+    if (!implementationClosed || fixClosedCount !== 1) {
+      return { ok: false, error: { code: "completed-evidence-incomplete", message: "Fix completion requires lease history proving implementation then exactly one fix round." } };
+    }
+  }
+
   // Build defensive provenance first, but do not commit it unless the status
   // transition succeeds. Keep prior pending retry evidence through later reports.
   const record: AcceptedReportRecord = { attempt: ticket.attempts, outcome, report: structuredClone(report) };
@@ -441,6 +658,10 @@ export function applyEvidencedOutcome(state: BatchRunState, id: string, reportVa
   if (!transitioned) return { ok: false, error: { code: "invalid-transition", message: "Ticket could not transition." } };
   transitioned.evidence = evidence;
   state.decisionIndex = nextIndex;
+  if (closedHandoff) {
+    appendClosedLeaseHistory(state, closedHandoff);
+    delete state.activeWriterLease;
+  }
   if (mergedPacket) {
     const key = decisionPacketEquivalenceKey(mergedPacket);
     // Earlier escalations retain their original accepted envelopes, but their
@@ -553,6 +774,11 @@ export function deactivate(state: BatchRunState, reason?: string): void {
         t.status = t.status === "in_progress" ? "queued" : t.status;
       }
     }
+  }
+  // Source-change/stop paths must explicitly revoke mutation authority rather than
+  // leave an open lease orphaned against a non-in_progress ticket.
+  if (state.activeWriterLease) {
+    delete state.activeWriterLease;
   }
   state.updatedAt = Date.now();
 }

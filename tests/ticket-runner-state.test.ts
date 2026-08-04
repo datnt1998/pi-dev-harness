@@ -1,13 +1,18 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  acquireBatchWriterLease,
   applyEvidencedOutcome,
   applyOutcome,
+  assertBatchReviewAllowed,
+  closeBatchWriterLease,
   createRunState,
+  deactivate,
   isBatchRunState,
   isTerminal,
   nextActionableTicket,
   propagateSkips,
+  reconcileBatchWriterLease,
   recordContinuation,
   recoveryGuidance,
   shouldContinue,
@@ -32,13 +37,30 @@ function baseState(commit = false) {
   });
 }
 
-function report(outcome: "completed" | "retry" | "failed" | "blocked" | "needs_decision" = "completed") {
+function reportFor(ticketId: string, attempt: number, outcome: "completed" | "retry" | "failed" | "blocked" | "needs_decision" = "completed") {
   const validationOutcome = outcome === "completed" ? "passed" : "failed";
   return {
     protocolVersion: 1,
-    workUnit: { source: "tickets.md", sourceFingerprint: "fp", ticketId: "T1", purpose: "state gate", attempt: 1 },
+    workUnit: { source: "tickets.md", sourceFingerprint: "fp", ticketId, purpose: "state gate", attempt },
     runs: [{ role: "producer", actor: "writer", runId: "run-1", contextMode: "fresh", acceptanceMode: "checked", provider: { provider: "producer", fallback: false, effectiveModel: "verified", effectiveThinking: "verified" } }],
-    writerLease: { owner: "writer", phase: "closed", allowedPaths: ["lib/x.ts"], openedAt: "2026-01-01", closedAt: "2026-01-01", handoffFingerprint: "implementation" },
+    eligibility: {
+      lane: "parent",
+      reasonCode: "tiny-known-parent",
+      rule: "tiny known diffs stay on the parent writer lane",
+      architectureFrozen: true,
+      scopeExplicit: true,
+      reversible: true,
+      falsifiableBar: "node --test",
+      validationAvailable: true,
+      freshContext: true,
+      checkedAcceptance: true,
+      pilotMember: false,
+      allowedPaths: ["lib/x.ts"],
+      importantReasoning: "none",
+      tinyKnownDiff: true,
+      leaseSafetyAvailable: true,
+    },
+    writerLease: { leaseId: "lease-1", ticketId, attempt, worktreeKey: "active", owner: "writer", ownerRole: "parent", phase: "closed", allowedPaths: ["lib/x.ts"], openedAt: "2026-01-01", closedAt: "2026-01-01", handoffFingerprint: "implementation" },
     implementation: { changedPaths: ["lib/x.ts"], fingerprint: "implementation" },
     producerObservations: [{ summary: "observed failure", locators: ["log:1"], replayCommands: ["node --test"] }],
     parentValidation: [{ command: "node --test", outcome: validationOutcome, locator: "log:2", observedFingerprint: "implementation" }],
@@ -49,9 +71,23 @@ function report(outcome: "completed" | "retry" | "failed" | "blocked" | "needs_d
     dispositions: [], fixAndRereview: { round: 0, fixApplied: false },
     completionFidelity: { criteria: { C1: "verified", C2: "verified", C3: "verified", C4: "verified", C5: "verified", C6: "verified", C7: "verified" }, claims: [{ claim: "test", locator: "log:2", verifiedBy: "parent" }] },
     diversity: { achievedIndependence: "provider-distinct", degraded: false, cleanPilotEvidence: true }, residualRisks: outcome === "completed" ? [] : ["safe to retry after changing implementation"], requestedOutcome: outcome,
-    ...(outcome === "needs_decision" ? { decisionPacket: { affectedWorkUnitIds: ["T1"], affectedTicketIds: ["T1"], affectedFiles: ["lib/x.ts"], locatorOrGlob: "lib/x.ts:1", searchedScope: "lib", exclusions: ["node_modules"], pattern: "missing invariant", patternKind: "decision-category", occurrences: 1, representativeLocators: ["lib/x.ts:1"], question: "Which behavior should apply?", safeDefault: "Leave the current behavior unchanged.", consequences: "Callers retain existing semantics.", replayCommand: "rg invariant lib", disconfirmProcedure: "Inspect the representative locator.", blockedStage: "implementation", unrelatedWorkSafe: true } } : {}),
+    ...(outcome === "needs_decision" ? { decisionPacket: { affectedWorkUnitIds: [ticketId], affectedTicketIds: [ticketId], affectedFiles: ["lib/x.ts"], locatorOrGlob: "lib/x.ts:1", searchedScope: "lib", exclusions: ["node_modules"], pattern: "missing invariant", patternKind: "decision-category", occurrences: 1, representativeLocators: ["lib/x.ts:1"], question: "Which behavior should apply?", safeDefault: "Leave the current behavior unchanged.", consequences: "Callers retain existing semantics.", replayCommand: "rg invariant lib", disconfirmProcedure: "Inspect the representative locator.", blockedStage: "implementation", unrelatedWorkSafe: true } } : {}),
     parentGate: { actor: "parent", role: "parent", action: outcome === "completed" ? "accepted" : "escalated", observedFingerprint: "implementation", evidenceLocator: "log:3" },
   } as any;
+}
+
+function report(outcome: "completed" | "retry" | "failed" | "blocked" | "needs_decision" = "completed") {
+  return reportFor("T1", 1, outcome);
+}
+
+function withRecordedLease(state: ReturnType<typeof baseState>, leaseId = "lease-1", fingerprint = "implementation") {
+  assert.equal(acquireBatchWriterLease(state, {
+    leaseId, worktreeKey: "active", owner: "writer", ownerRole: "parent", phase: "implementation",
+    ticketId: "T1", attempt: 1, allowedPaths: ["lib/x.ts"], openedAt: "2026-01-01",
+  }).ok, true);
+  assert.equal(closeBatchWriterLease(state, {
+    leaseId, owner: "writer", closedAt: "2026-01-01", handoffFingerprint: fingerprint,
+  }).ok, true);
 }
 
 test("createRunState creates deterministic complete order from partial duplicate request", () => {
@@ -87,7 +123,7 @@ test("persisted state validation rejects malformed entries", () => {
   assert.equal(isBatchRunState({ ...baseState(), tickets: [{ id: "T1", status: "bogus" }] }), false);
   assert.equal(isBatchRunState(undefined), false);
 
-  const evidenced = baseState(); startTicket(evidenced, "T1");
+  const evidenced = baseState(); startTicket(evidenced, "T1"); withRecordedLease(evidenced);
   assert.equal(applyEvidencedOutcome(evidenced, "T1", report(), "completed").ok, true);
   const corrupt = structuredClone(evidenced) as any;
   corrupt.tickets[0].evidence.acceptedReports[0].report.protocolVersion = 2;
@@ -180,7 +216,7 @@ test("valid retry, failed, and blocked reports transition only after their evide
 });
 
 test("evidenced completion transitions only its matching active ticket and derives note", () => {
-  const state = baseState(); startTicket(state, "T1");
+  const state = baseState(); startTicket(state, "T1"); withRecordedLease(state);
   const accepted = applyEvidencedOutcome(state, "T1", report(), "completed");
   assert.equal(accepted.ok, true);
   assert.equal(state.tickets[0].status, "completed");
@@ -222,8 +258,8 @@ test("equivalent decisions merge evidence, persist, block dependents, and retain
   startTicket(state, "T1"); assert.equal(applyEvidencedOutcome(state, "T1", report("needs_decision"), "needs_decision").ok, true);
   assert.equal(state.tickets.find((ticket) => ticket.id === "T2")?.status, "skipped");
   assert.equal(nextActionableTicket(state)?.id, "T3");
-  startTicket(state, "T3"); const second = report("needs_decision");
-  second.workUnit.ticketId = "T3"; second.decisionPacket.affectedWorkUnitIds = ["T3"]; second.decisionPacket.affectedTicketIds = ["T3"]; second.decisionPacket.affectedFiles = ["tests/x.ts"]; second.decisionPacket.representativeLocators = ["tests/x.ts:2"]; second.decisionPacket.replayCommand = "rg invariant tests"; second.decisionPacket.disconfirmProcedure = "Inspect test locator.";
+  startTicket(state, "T3"); const second = reportFor("T3", 1, "needs_decision");
+  second.decisionPacket.affectedFiles = ["tests/x.ts"]; second.decisionPacket.representativeLocators = ["tests/x.ts:2"]; second.decisionPacket.replayCommand = "rg invariant tests"; second.decisionPacket.disconfirmProcedure = "Inspect test locator.";
   assert.equal(applyEvidencedOutcome(state, "T3", second, "needs_decision").ok, true);
   assert.equal(state.decisionIndex?.length, 1);
   const merged = state.decisionIndex![0].packet;
@@ -263,8 +299,8 @@ test("equivalent decision merge reconstructs earlier pending state without rewri
   const state = createRunState({ batchId: "b", source: "tickets.md", fingerprint: "fp", order: ["T1", "T2", "T3"], tickets: [{ id: "T1", dependencies: [] }, { id: "T2", dependencies: [] }, { id: "T3", dependencies: [] }], now: 1 });
   startTicket(state, "T1"); assert.equal(applyEvidencedOutcome(state, "T1", report("needs_decision"), "needs_decision").ok, true);
   const firstReport = structuredClone(state.tickets[0].evidence!.acceptedReports[0].report);
-  startTicket(state, "T2"); const second = report("needs_decision");
-  second.workUnit.ticketId = "T2"; second.decisionPacket.affectedWorkUnitIds = ["T2"]; second.decisionPacket.affectedTicketIds = ["T2"]; second.decisionPacket.affectedFiles = ["tests/x.ts"]; second.decisionPacket.representativeLocators = ["tests/x.ts:2"]; second.decisionPacket.consequences = "Tests retain existing semantics."; second.decisionPacket.occurrences = 2;
+  startTicket(state, "T2"); const second = reportFor("T2", 1, "needs_decision");
+  second.decisionPacket.affectedFiles = ["tests/x.ts"]; second.decisionPacket.representativeLocators = ["tests/x.ts:2"]; second.decisionPacket.consequences = "Tests retain existing semantics."; second.decisionPacket.occurrences = 2;
   assert.equal(applyEvidencedOutcome(state, "T2", second, "needs_decision").ok, true);
   const canonical = state.decisionIndex![0].packet;
   assert.deepEqual(canonical.affectedTicketIds, ["T1", "T2"]);
@@ -275,8 +311,8 @@ test("equivalent decision merge reconstructs earlier pending state without rewri
   assert.deepEqual(state.tickets[0].evidence?.acceptedReports[0].report, firstReport);
   assert.equal(canonical.occurrences, 2); // max avoids double-counting overlapping searches
 
-  startTicket(state, "T3"); const uncounted = report("needs_decision");
-  uncounted.workUnit.ticketId = "T3"; uncounted.decisionPacket.affectedWorkUnitIds = ["T3"]; uncounted.decisionPacket.affectedTicketIds = ["T3"]; delete uncounted.decisionPacket.occurrences; uncounted.decisionPacket.notCountedReason = "Generated files prevent a reliable count."; uncounted.decisionPacket.unrelatedWorkSafe = false;
+  startTicket(state, "T3"); const uncounted = reportFor("T3", 1, "needs_decision");
+  delete uncounted.decisionPacket.occurrences; uncounted.decisionPacket.notCountedReason = "Generated files prevent a reliable count."; uncounted.decisionPacket.unrelatedWorkSafe = false;
   assert.equal(applyEvidencedOutcome(state, "T3", uncounted, "needs_decision").ok, true);
   assert.equal(state.decisionIndex![0].packet.occurrences, 2);
   assert.equal(state.decisionIndex![0].packet.notCountedReason, undefined);
@@ -287,7 +323,7 @@ test("equivalent decision merge reconstructs earlier pending state without rewri
 test("changed owner question at the same structural locus does not merge", () => {
   const state = createRunState({ batchId: "b", source: "tickets.md", fingerprint: "fp", order: ["T1", "T2"], tickets: [{ id: "T1", dependencies: [] }, { id: "T2", dependencies: [] }], now: 1 });
   startTicket(state, "T1"); assert.equal(applyEvidencedOutcome(state, "T1", report("needs_decision"), "needs_decision").ok, true);
-  startTicket(state, "T2"); const different = report("needs_decision"); different.workUnit.ticketId = "T2"; different.decisionPacket.affectedWorkUnitIds = ["T2"]; different.decisionPacket.affectedTicketIds = ["T2"]; different.decisionPacket.question = "Which compatibility contract should apply?";
+  startTicket(state, "T2"); const different = reportFor("T2", 1, "needs_decision"); different.decisionPacket.question = "Which compatibility contract should apply?";
   assert.equal(applyEvidencedOutcome(state, "T2", different, "needs_decision").ok, true);
   assert.equal(state.decisionIndex?.length, 2);
 });
@@ -312,7 +348,7 @@ test("unsafe decisions stop unrelated scheduling while safe decisions permit it"
 });
 
 test("degraded completion derives warning, actual topology, guidance, and continue acknowledgment", () => {
-  const state = baseState(); startTicket(state, "T1");
+  const state = baseState(); startTicket(state, "T1"); withRecordedLease(state);
   const degraded = report();
   degraded.runs[0].provider.provider = "shared";
   degraded.reviews[0].run.provider.provider = "shared";
@@ -342,7 +378,7 @@ test("accepted evidence is cloned and retains pending retry evidence after a lat
   retry.residualRisks[0] = "mutated outside state";
   assert.notEqual(state.tickets[0].evidence?.pendingEvidence?.residualRisks[0], "mutated outside state");
   startTicket(state, "T1");
-  const failed = report("failed"); failed.workUnit.attempt = 2;
+  const failed = reportFor("T1", 2, "failed");
   assert.equal(applyEvidencedOutcome(state, "T1", failed, "failed").ok, true);
   assert.equal(state.tickets[0].evidence?.acceptedReports.length, 2);
   assert.equal(state.tickets[0].evidence?.pendingEvidence?.requestedOutcome, "retry");
@@ -448,4 +484,206 @@ test("continuation guard stops runaway loops", () => {
   recordContinuation(state);
   assert.equal(shouldContinue(state), false);
   assert.equal(stopReason(state), "max_continuations");
+});
+
+test("batch writer leases are exclusive, block review while open, and survive resume checks", () => {
+  const state = baseState();
+  startTicket(state, "T1");
+  const first = acquireBatchWriterLease(state, {
+    leaseId: "lease-1", worktreeKey: "active", owner: "writer", ownerRole: "parent", phase: "implementation",
+    ticketId: "T1", attempt: 1, allowedPaths: ["lib/x.ts"], openedAt: "2026-01-01",
+  });
+  assert.equal(first.ok, true);
+  assert.equal(assertBatchReviewAllowed(state).ok, false);
+  const second = acquireBatchWriterLease(state, {
+    leaseId: "lease-2", worktreeKey: "active", owner: "other", ownerRole: "worker", phase: "implementation",
+    ticketId: "T1", attempt: 1, allowedPaths: ["lib/x.ts"], openedAt: "2026-01-01",
+  });
+  assert.equal(second.ok, false);
+  if (!second.ok) assert.equal(second.error.code, "overlap");
+  assert.equal(isBatchRunState(structuredClone(state)), true);
+  assert.equal(reconcileBatchWriterLease(state).ok, true);
+
+  const closed = closeBatchWriterLease(state, { leaseId: "lease-1", owner: "writer", closedAt: "2026-01-01", handoffFingerprint: "implementation" });
+  assert.equal(closed.ok, true);
+  assert.equal(assertBatchReviewAllowed(state).ok, true);
+  assert.equal(state.activeWriterLease, undefined);
+  assert.equal(state.lastClosedWriterLease?.handoffFingerprint, "implementation");
+
+  // Orphaned lease after the ticket leaves in_progress fails closed on reconcile.
+  startTicket(state, "T1");
+  assert.equal(acquireBatchWriterLease(state, {
+    leaseId: "lease-3", worktreeKey: "active", owner: "writer", ownerRole: "parent", phase: "implementation",
+    ticketId: "T1", attempt: 1, allowedPaths: ["lib/x.ts"], openedAt: "2026-01-02",
+  }).ok, true);
+  state.tickets[0].status = "completed";
+  const orphan = reconcileBatchWriterLease(state);
+  assert.equal(orphan.ok, false);
+  if (!orphan.ok) assert.equal(orphan.error.code, "orphan");
+});
+
+test("evidenced completion rejects contradictory open leases and clears a matching closed handoff", () => {
+  const state = baseState();
+  startTicket(state, "T1");
+  assert.equal(acquireBatchWriterLease(state, {
+    leaseId: "lease-1", worktreeKey: "active", owner: "writer", ownerRole: "parent", phase: "implementation",
+    ticketId: "T1", attempt: 1, allowedPaths: ["lib/x.ts"], openedAt: "2026-01-01",
+  }).ok, true);
+  const contradiction = report();
+  contradiction.writerLease.leaseId = "other-lease";
+  const before = structuredClone(state);
+  assert.equal(applyEvidencedOutcome(state, "T1", contradiction, "completed").ok, false);
+  assert.deepEqual(state.activeWriterLease, before.activeWriterLease);
+
+  assert.equal(applyEvidencedOutcome(state, "T1", report(), "completed").ok, true);
+  assert.equal(state.activeWriterLease, undefined);
+  assert.equal(state.lastClosedWriterLease?.leaseId, "lease-1");
+  assert.equal(state.tickets[0].status, "completed");
+  assert.equal((state.writerLeaseHistory ?? []).some((lease) => lease.leaseId === "lease-1"), true);
+});
+
+test("self-asserted closed completion without a recorded lease is rejected", () => {
+  const state = baseState(); startTicket(state, "T1"); const before = structuredClone(state);
+  const result = applyEvidencedOutcome(state, "T1", report(), "completed");
+  assert.equal(result.ok, false);
+  if (!result.ok) assert.match(result.error.message, /Self-asserted closed writer lease/);
+  assert.deepEqual(state, before);
+});
+
+test("non-completed outcomes cannot leave an open lease orphaned", () => {
+  const state = baseState(); startTicket(state, "T1");
+  assert.equal(acquireBatchWriterLease(state, {
+    leaseId: "lease-open", worktreeKey: "active", owner: "writer", ownerRole: "parent", phase: "implementation",
+    ticketId: "T1", attempt: 1, allowedPaths: ["lib/x.ts"], openedAt: "2026-01-01",
+  }).ok, true);
+  const openRetry = report("retry");
+  openRetry.writerLease.phase = "implementation";
+  delete openRetry.writerLease.closedAt;
+  delete openRetry.writerLease.handoffFingerprint;
+  const before = structuredClone(state);
+  assert.equal(applyEvidencedOutcome(state, "T1", openRetry, "retry").ok, false);
+  assert.deepEqual(state, before);
+
+  const closedRetry = report("retry");
+  closedRetry.writerLease.leaseId = "lease-open";
+  assert.equal(applyEvidencedOutcome(state, "T1", closedRetry, "retry").ok, true);
+  assert.equal(state.activeWriterLease, undefined);
+  assert.equal(state.tickets[0].status, "queued");
+  assert.equal(state.lastClosedWriterLease?.leaseId, "lease-open");
+});
+
+test("isBatchRunState rejects orphaned open leases and deactivate clears mutation authority", () => {
+  const state = baseState(); startTicket(state, "T1");
+  assert.equal(acquireBatchWriterLease(state, {
+    leaseId: "lease-1", worktreeKey: "active", owner: "writer", ownerRole: "parent", phase: "implementation",
+    ticketId: "T1", attempt: 1, allowedPaths: ["lib/x.ts"], openedAt: "2026-01-01",
+  }).ok, true);
+  assert.equal(isBatchRunState(structuredClone(state)), true);
+  state.tickets[0].status = "queued";
+  assert.equal(isBatchRunState(structuredClone(state)), false);
+  state.tickets[0].status = "in_progress";
+  deactivate(state, "source_changed");
+  assert.equal(state.activeWriterLease, undefined);
+  assert.equal(state.tickets[0].status, "queued");
+  assert.equal(isBatchRunState(structuredClone(state)), true);
+});
+
+test("fix lease paths must stay inside brief and eligibility scope at batch acquire", () => {
+  const state = baseState(); startTicket(state, "T1");
+  const dispositions = [{ findingId: "F1", disposition: "accepted" as const, parentActor: "parent", evidenceLocator: "d:1" }];
+  const brief = { briefId: "fix-1", parentActor: "parent", acceptedFindingIds: ["F1"], scopePaths: ["lib/x.ts"], summary: "fix", issuedAt: "2026-01-01" };
+  const outside = acquireBatchWriterLease(state, {
+    leaseId: "fix-1", worktreeKey: "active", owner: "fix-writer", ownerRole: "fix-writer", phase: "fix",
+    ticketId: "T1", attempt: 1, allowedPaths: ["lib/y.ts"], openedAt: "2026-01-01", fixBriefId: "fix-1",
+  }, { dispositions, fixBrief: brief, priorFixRounds: 0, implementationScopePaths: ["lib/x.ts", "lib/y.ts"] });
+  assert.equal(outside.ok, false);
+  const ok = acquireBatchWriterLease(state, {
+    leaseId: "fix-1", worktreeKey: "active", owner: "fix-writer", ownerRole: "fix-writer", phase: "fix",
+    ticketId: "T1", attempt: 1, allowedPaths: ["lib/x.ts"], openedAt: "2026-01-01", fixBriefId: "fix-1",
+  }, { dispositions, fixBrief: brief, priorFixRounds: 0, implementationScopePaths: ["lib/x.ts"] });
+  assert.equal(ok.ok, true);
+});
+
+test("fixApplied completion requires implementation-then-fix lease history and rejects bare fix evidence", () => {
+  const state = baseState(); startTicket(state, "T1");
+  withRecordedLease(state, "impl-lease", "implementation");
+  const dispositions = [{ findingId: "F1", disposition: "accepted" as const, parentActor: "parent", evidenceLocator: "d:1" }];
+  const brief = { briefId: "fix-1", parentActor: "parent", acceptedFindingIds: ["F1"], scopePaths: ["lib/x.ts"], summary: "fix", issuedAt: "2026-01-02" };
+  assert.equal(acquireBatchWriterLease(state, {
+    leaseId: "fix-lease", ticketId: "T1", attempt: 1, worktreeKey: "active", owner: "fix-writer", ownerRole: "fix-writer", phase: "fix",
+    ticketId: "T1", attempt: 1, allowedPaths: ["lib/x.ts"], openedAt: "2026-01-02", fixBriefId: "fix-1",
+  }, { dispositions, fixBrief: brief, implementationScopePaths: ["lib/x.ts"] }).ok, true);
+  assert.equal(closeBatchWriterLease(state, {
+    leaseId: "fix-lease", owner: "fix-writer", closedAt: "2026-01-02", handoffFingerprint: "implementation",
+  }).ok, true);
+
+  const fixed = report();
+  fixed.reviews[0].verdict = "findings";
+  fixed.reviews[0].findings = [{ id: "F1", severity: "medium", summary: "nit", locator: "lib/x.ts:1", replay: "node --test" }];
+  fixed.dispositions = dispositions;
+  const fixLease = {
+    leaseId: "fix-lease", ticketId: "T1", attempt: 1, worktreeKey: "active", owner: "fix-writer", ownerRole: "fix-writer", phase: "closed",
+    allowedPaths: ["lib/x.ts"], openedAt: "2026-01-02", closedAt: "2026-01-02", handoffFingerprint: "implementation", fixBriefId: "fix-1",
+  };
+  fixed.writerLease = { ...fixLease };
+  fixed.fixAndRereview = {
+    round: 1,
+    fixApplied: true,
+    fixBrief: brief,
+    fixLease,
+    fixValidation: [{ command: "node --test", outcome: "passed", locator: "log:fix", observedFingerprint: "implementation" }],
+    focusedRereview: structuredClone(fixed.reviews).map((review: any, index: number) => ({
+      ...review,
+      run: { ...review.run, runId: `re-${index}` },
+      verdict: "no-findings",
+      findings: [],
+    })),
+  };
+  assert.equal(applyEvidencedOutcome(state, "T1", fixed, "completed").ok, true);
+  assert.equal((state.writerLeaseHistory ?? []).filter((lease) => lease.ownerRole === "fix-writer").length, 1);
+  assert.equal((state.writerLeaseHistory ?? []).some((lease) => lease.leaseId === "impl-lease"), true);
+});
+
+test("closed lease history is scoped to each ticket attempt", () => {
+  const state = createRunState({ batchId: "b", source: "tickets.md", fingerprint: "fp", order: ["T1", "T2"], tickets: [{ id: "T1", dependencies: [] }, { id: "T2", dependencies: [] }], now: 1 });
+  const dispositions = [{ findingId: "F1", disposition: "accepted" as const, parentActor: "parent", evidenceLocator: "d:1" }];
+  const brief = { briefId: "fix-1", parentActor: "parent", acceptedFindingIds: ["F1"], scopePaths: ["lib/x.ts"], summary: "fix", issuedAt: "2026-01-01" };
+
+  startTicket(state, "T1");
+  assert.equal(acquireBatchWriterLease(state, { leaseId: "t1-fix", worktreeKey: "active", owner: "fix", ownerRole: "fix-writer", phase: "fix", ticketId: "T1", attempt: 1, allowedPaths: ["lib/x.ts"], openedAt: "2026-01-01", fixBriefId: "fix-1" }, { dispositions, fixBrief: brief, implementationScopePaths: ["lib/x.ts"] }).ok, true);
+  assert.equal(closeBatchWriterLease(state, { leaseId: "t1-fix", owner: "fix", closedAt: "2026-01-01", handoffFingerprint: "implementation" }).ok, true);
+  state.tickets[0].status = "completed";
+
+  startTicket(state, "T2");
+  assert.equal(acquireBatchWriterLease(state, { leaseId: "t2-fix", worktreeKey: "active", owner: "fix", ownerRole: "fix-writer", phase: "fix", ticketId: "T2", attempt: 1, allowedPaths: ["lib/x.ts"], openedAt: "2026-01-02", fixBriefId: "fix-1" }, { dispositions, fixBrief: brief, implementationScopePaths: ["lib/x.ts"] }).ok, true);
+  assert.equal(closeBatchWriterLease(state, { leaseId: "t2-fix", owner: "fix", closedAt: "2026-01-02", handoffFingerprint: "implementation" }).ok, true);
+  assert.equal(isBatchRunState(structuredClone(state)), true);
+
+  const wrongTicket = reportFor("T2", 1);
+  wrongTicket.writerLease = structuredClone(state.writerLeaseHistory![0]);
+  assert.equal(applyEvidencedOutcome(state, "T2", wrongTicket, "completed").ok, false);
+});
+
+test("fix lease acquisition requires parent dispositions and blocks a second ordinary round", () => {
+  const state = baseState();
+  startTicket(state, "T1");
+  const dispositions = [{ findingId: "F1", disposition: "accepted" as const, parentActor: "parent", evidenceLocator: "d:1" }];
+  const brief = { briefId: "fix-1", parentActor: "parent", acceptedFindingIds: ["F1"], scopePaths: ["lib/x.ts"], summary: "apply accepted fix", issuedAt: "2026-01-01" };
+  const missing = acquireBatchWriterLease(state, {
+    leaseId: "fix-1", worktreeKey: "active", owner: "fix-writer", ownerRole: "fix-writer", phase: "fix",
+    ticketId: "T1", attempt: 1, allowedPaths: ["lib/x.ts"], openedAt: "2026-01-01", fixBriefId: "fix-1",
+  });
+  assert.equal(missing.ok, false);
+  const first = acquireBatchWriterLease(state, {
+    leaseId: "fix-1", worktreeKey: "active", owner: "fix-writer", ownerRole: "fix-writer", phase: "fix",
+    ticketId: "T1", attempt: 1, allowedPaths: ["lib/x.ts"], openedAt: "2026-01-01", fixBriefId: "fix-1",
+  }, { dispositions, fixBrief: brief, priorFixRounds: 0 });
+  assert.equal(first.ok, true);
+  assert.equal(closeBatchWriterLease(state, { leaseId: "fix-1", owner: "fix-writer", closedAt: "2026-01-01", handoffFingerprint: "implementation" }).ok, true);
+  const second = acquireBatchWriterLease(state, {
+    leaseId: "fix-2", worktreeKey: "active", owner: "fix-writer", ownerRole: "fix-writer", phase: "fix",
+    ticketId: "T1", attempt: 1, allowedPaths: ["lib/x.ts"], openedAt: "2026-01-02", fixBriefId: "fix-1",
+  }, { dispositions, fixBrief: brief, priorFixRounds: 1 });
+  assert.equal(second.ok, false);
+  if (!second.ok) assert.equal(second.error.code, "fix-round-exhausted");
 });

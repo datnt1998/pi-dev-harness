@@ -32,6 +32,22 @@ test("runtime and normative callers require the stable sealed two-axis completio
   assert.match(runtime, /actual provider\/model/i);
 });
 
+test("batch and runtime require eligibility routing, exclusive writer leases, and one fix-worker round", () => {
+  const batch = text("skills/batch-implementation/SKILL.md");
+  const runtime = text("extensions/ticket-runner.ts");
+  for (const [name, value] of [["batch", batch], ["runtime", runtime]] as const) {
+    for (const required of ["eligibility", "writer lease", "exclusive", "fix-worker", "one bounded fix", "rework", "reviewers never", "batch_writer_lease"]) {
+      assert.match(value, new RegExp(required, "i"), `${name}: ${required}`);
+    }
+  }
+  assert.match(batch, /unknown\/mixed important reasoning fails closed/i);
+  assert.match(batch, /second substantial fix/i);
+  assert.match(batch, /self-asserted closed lease/i);
+  assert.match(runtime, /Parent implementation after delegation must be explicit rework/i);
+  assert.match(runtime, /self-asserted closed leases are rejected/i);
+  assert.match(runtime, /action: StringEnum\(\["acquire", "close", "reconcile", "review_allowed"\]/i);
+});
+
 test("reusable T4 paths retain provider and model route portability", () => {
   for (const path of reusablePaths) {
     assert.doesNotMatch(text(path), /\b(?:llmgate|qwencloud|qwen3\.8-max-preview|\bxai\b)\b/i, path);

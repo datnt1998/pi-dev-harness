@@ -6,14 +6,19 @@ import { isAbsolute, resolve } from "node:path";
 import { CONTINUATION_EVENT, continuationRegistry } from "../lib/continuation-event.ts";
 import { manifestSource, parseImplementArgs } from "../lib/ticket-runner-input.ts";
 import { analyzeBatch, fingerprint, isRunnable, parseTickets } from "../lib/ticket-readiness.ts";
+import type { ActiveWriterLease, FixBriefEvidence, FindingDispositionEvidence } from "../lib/team-orchestration-protocol.ts";
 import {
+  acquireBatchWriterLease,
   applyEvidencedOutcome,
+  assertBatchReviewAllowed,
   type BatchRunState,
+  closeBatchWriterLease,
   createRunState,
   deactivate,
   inProgressTicket,
   isBatchRunState,
   nextActionableTicket,
+  reconcileBatchWriterLease,
   recordContinuation,
   recoveryGuidance,
   shouldContinue,
@@ -71,6 +76,13 @@ function ticketRaw(ctx: ExtensionContext, state: BatchRunState, id: string): str
   }
 }
 
+function leaseCoaching(resumed: boolean): string {
+  const lead = resumed
+    ? "Preserve eligibility and the exclusive writer lease for this worktree."
+    : "Record explicit eligibility and acquire one exclusive writer lease via batch_writer_lease.";
+  return `${lead} Implement and parent-validate under that lease, close the stable writer handoff with batch_writer_lease before review, confirm review_allowed, collect separate fresh sealed Standards and Spec evidence with actual provenance and any required pre-stage degradation acknowledgment, parent-dispose findings, allow at most one bounded fix-worker round with revalidation/focused re-review when substantial, then call batch_report with evidence matching the recorded lease lifecycle.`;
+}
+
 export default function (pi: ExtensionAPI) {
   // State belongs to this extension instance; module-level state would leak
   // batches across multiple hosts or test instances.
@@ -83,9 +95,27 @@ export default function (pi: ExtensionAPI) {
 
   function reconstruct(ctx: ExtensionContext) {
     current = undefined;
-    for (const entry of ctx.sessionManager.getBranch()) {
-      if (entry.type === "custom" && entry.customType === STATE_ENTRY && isBatchRunState(entry.data)) current = structuredClone(entry.data);
+    const snapshots = ctx.sessionManager.getBranch().filter((entry) => entry.type === "custom" && entry.customType === STATE_ENTRY);
+    if (snapshots.length === 0) return;
+    const latest = snapshots.at(-1)!;
+    if (!isBatchRunState(latest.data)) {
+      // Persisted authority is append-only: never roll back past a corrupt newest snapshot.
+      const candidate = latest.data as Partial<BatchRunState>;
+      if (candidate && typeof candidate === "object" && candidate.version === 1 && typeof candidate.batchId === "string") {
+        current = createRunState({
+          batchId: candidate.batchId,
+          source: typeof candidate.source === "string" ? candidate.source : "invalid-state",
+          fingerprint: typeof candidate.fingerprint === "string" ? candidate.fingerprint : "invalid-state",
+          order: [],
+          tickets: [],
+        });
+        current.active = false;
+      }
+      return;
     }
+    current = structuredClone(latest.data);
+    const lease = reconcileBatchWriterLease(current);
+    if (!lease.ok) deactivate(current, `lease_${lease.error.code}`);
   }
 
   function setStatus(ctx: ExtensionContext) {
@@ -151,7 +181,7 @@ export default function (pi: ExtensionAPI) {
       // Coordination is best-effort; the runner must keep working without consumers.
     }
     pi.sendUserMessage(
-      "/skill:batch-implementation continue the active ticket batch: call batch_next, implement one ticket, close the writer handoff at a stable fingerprint, collect separate sealed Standards and Spec review axes, parent-dispose findings, then batch_report.",
+      "/skill:batch-implementation continue the active ticket batch: call batch_next, record eligibility, acquire/close the exclusive writer lease through batch_writer_lease, implement one ticket, collect separate sealed Standards and Spec review axes only after review_allowed, parent-dispose findings, allow at most one bounded fix-worker round, then batch_report.",
       { deliverAs: "followUp" },
     );
   });
@@ -232,7 +262,7 @@ export default function (pi: ExtensionAPI) {
         // Best-effort.
       }
       pi.sendUserMessage(
-        `/skill:batch-implementation A pre-approved ticket batch is active (source ${sourcePath}, commit=${commit}). The parent is the sole writer: call batch_next, then implement and validate. If pi-subagents is available, close the writer handoff and record one stable implementation fingerprint before review. Require separate fresh Standards and Spec review calls against that fingerprint; each must prove read-only capability sealing or serialized pre/post mutation fingerprints. Before an affected review stage, compare the target with configured/resolved provenance. Record actual provider/model, fallback, effective-model, and effective-thinking confidence—not requested routes. For provider overlap, fallback, or unknown effective model/thinking, display the complete degraded-topology warning and require an explicit operator continue acknowledgment before launch; persist and repeat it in terminal evidence, and never call it independent or clean pilot evidence. If sealed subagents are unavailable, a structured self-review fallback may aid diagnosis but cannot authorize high-risk/package-policy completion or independence. Missing, combined, self, stale, unsealed, or mutated reviews fail closed. Parent-dispose every finding with replay evidence, apply only scoped fixes, then call batch_report with structured evidence. Continue until batch_next reports done or a decision is required. Do not ask for per-ticket confirmation.`,
+        `/skill:batch-implementation A pre-approved ticket batch is active (source ${sourcePath}, commit=${commit}). Record an explicit parent eligibility decision and acquire one exclusive writer lease via batch_writer_lease for the active worktree (parent lane by default; worker lane only for frozen, reversible, explicitly scoped pilot work with a parent-known falsifiable bar). Call batch_next, then implement and validate under that lease. If pi-subagents is available, use it only within that exclusive lease and never as a second concurrent writer. Close the writer handoff through batch_writer_lease and record one stable implementation fingerprint before review—use batch_writer_lease action review_allowed; reviewers never acquire mutation authority. Require separate fresh Standards and Spec review calls against that fingerprint; each must prove read-only capability sealing or serialized pre/post mutation fingerprints. Before an affected review stage, compare the target with configured/resolved provenance. Record actual provider/model, fallback, effective-model, and effective-thinking confidence—not requested routes. For provider overlap, fallback, or unknown effective model/thinking, display the complete degraded-topology warning and require an explicit operator continue acknowledgment before launch; persist and repeat it in terminal evidence, and never call it independent or clean pilot evidence. If sealed subagents are unavailable, a structured self-review fallback may aid diagnosis but cannot authorize high-risk/package-policy completion or independence. Missing, combined, self, stale, unsealed, or mutated reviews fail closed. Parent-dispose every finding with replay evidence before any fix lease; permit at most one bounded fix-worker round via batch_writer_lease, then parent-revalidate and focused re-review when substantial. A second substantial fix, repeated finding, or semantic conflict escalates. Parent implementation after delegation must be explicit rework/strong-route evidence. Then call batch_report with structured evidence that matches the recorded lease lifecycle—self-asserted closed leases are rejected. Continue until batch_next reports done or a decision is required. Do not ask for per-ticket confirmation.`,
         { deliverAs: ctx.isIdle() ? undefined : "followUp" },
       );
     },
@@ -283,6 +313,13 @@ export default function (pi: ExtensionAPI) {
         setStatus(ctx);
         return { content: [{ type: "text", text: "Batch stopped: source changed; re-gate and restart." }], details: { stop: "source_changed" } };
       }
+      const lease = reconcileBatchWriterLease(current);
+      if (!lease.ok) {
+        deactivate(current, `lease_${lease.error.code}`);
+        persist();
+        setStatus(ctx);
+        return { content: [{ type: "text", text: `Batch stopped: writer lease ${lease.error.code}; ${lease.error.message}` }], details: { stop: "lease_conflict", code: lease.error.code } };
+      }
       // Resume a ticket already in progress instead of starting a new one.
       const resuming = inProgressTicket(current);
       if (resuming) {
@@ -291,10 +328,10 @@ export default function (pi: ExtensionAPI) {
           content: [
             {
               type: "text",
-              text: `Resume ticket ${resuming.id} (attempt ${resuming.attempts}). commit=${current.commit}.\n\n${ticketRaw(ctx, current, resuming.id)}\n\nAs the sole parent writer, finish implementation and parent validation, close the stable writer handoff, collect separate fresh sealed Standards and Spec evidence with actual provenance and any required pre-stage degradation acknowledgment, parent-dispose findings, then call batch_report.`,
+              text: `Resume ticket ${resuming.id} (attempt ${resuming.attempts}). commit=${current.commit}.\n\n${ticketRaw(ctx, current, resuming.id)}\n\n${leaseCoaching(true)}`,
             },
           ],
-          details: { id: resuming.id, attempt: resuming.attempts, commit: current.commit, resumed: true },
+          details: { id: resuming.id, attempt: resuming.attempts, commit: current.commit, resumed: true, activeWriterLease: current.activeWriterLease },
         };
       }
       const reason = stopReason(current);
@@ -312,11 +349,130 @@ export default function (pi: ExtensionAPI) {
         content: [
           {
             type: "text",
-            text: `Work ticket ${next.id} (attempt ${next.attempts}). commit=${current.commit}.\n\n${ticketRaw(ctx, current, next.id)}\n\nAs the sole parent writer, implement and parent-validate, close the stable writer handoff, collect separate fresh sealed Standards and Spec evidence with actual provenance and any required pre-stage degradation acknowledgment, parent-dispose findings, then call batch_report.`,
+            text: `Work ticket ${next.id} (attempt ${next.attempts}). commit=${current.commit}.\n\n${ticketRaw(ctx, current, next.id)}\n\n${leaseCoaching(false)}`,
           },
         ],
         details: { id: next.id, attempt: next.attempts, commit: current.commit },
       };
+    },
+  });
+
+  // Provider-agnostic lease seam: acquire, close/handoff, reconcile, review guard.
+  pi.registerTool({
+    name: "batch_writer_lease",
+    label: "Batch Writer Lease",
+    description: "Acquire, close/handoff, reconcile, or check review_allowed for the exclusive active-worktree writer lease. Reviewers never acquire mutation authority.",
+    promptSnippet: "Manage the exclusive writer lease for the active ticket batch",
+    parameters: Type.Object({
+      action: StringEnum(["acquire", "close", "reconcile", "review_allowed"] as const),
+      leaseId: Type.Optional(Type.String({ description: "Lease id for acquire/close" })),
+      owner: Type.Optional(Type.String({ description: "Lease owner actor id" })),
+      ownerRole: Type.Optional(StringEnum(["parent", "worker", "fix-writer"] as const)),
+      phase: Type.Optional(StringEnum(["implementation", "fix"] as const)),
+      worktreeKey: Type.Optional(Type.String({ description: "Exclusive worktree/mutation domain key" })),
+      allowedPaths: Type.Optional(Type.Array(Type.String(), { description: "Paths the writer may mutate" })),
+      openedAt: Type.Optional(Type.String({ description: "ISO timestamp when the lease opened" })),
+      closedAt: Type.Optional(Type.String({ description: "ISO timestamp when the lease closed" })),
+      handoffFingerprint: Type.Optional(Type.String({ description: "Parent-observed stable implementation fingerprint at close" })),
+      fixBriefId: Type.Optional(Type.String({ description: "Parent fix brief id when phase is fix" })),
+      implementationScopePaths: Type.Optional(Type.Array(Type.String(), { description: "Eligibility/allowed implementation scope containing lease paths" })),
+      dispositions: Type.Optional(Type.Any({ description: "Parent finding dispositions required before a fix lease" })),
+      fixBrief: Type.Optional(Type.Any({ description: "Parent fix brief required before a fix lease" })),
+      priorFixRounds: Type.Optional(Type.Number({ description: "Prior ordinary fix rounds already consumed" })),
+    }),
+    async execute(_id, params, _signal, _onUpdate, ctx) {
+      reconstruct(ctx);
+      if (!current || !current.active) {
+        return { content: [{ type: "text", text: "No active ticket batch." }], details: {} };
+      }
+      if (!sourceIsCurrent(ctx, current)) {
+        deactivate(current, "source_changed");
+        persist();
+        setStatus(ctx);
+        return { content: [{ type: "text", text: "Batch stopped: source changed; lease not mutated." }], details: { stop: "source_changed" } };
+      }
+
+      if (params.action === "reconcile") {
+        const result = reconcileBatchWriterLease(current);
+        if (!result.ok) {
+          deactivate(current, `lease_${result.error.code}`);
+          persist();
+          setStatus(ctx);
+          return { content: [{ type: "text", text: `Lease reconcile failed: ${result.error.code}: ${result.error.message}` }], details: { ok: false, code: result.error.code } };
+        }
+        return {
+          content: [{ type: "text", text: result.lease ? `Active writer lease ${result.lease.leaseId} (${result.lease.ownerRole}/${result.lease.phase}).` : "No active writer lease." }],
+          details: { ok: true, activeWriterLease: result.lease, lastClosedWriterLease: current.lastClosedWriterLease, writerLeaseHistory: current.writerLeaseHistory ?? [] },
+        };
+      }
+
+      if (params.action === "review_allowed") {
+        const result = assertBatchReviewAllowed(current);
+        if (!result.ok) {
+          return { content: [{ type: "text", text: `Review not allowed: ${result.error.message}` }], details: { ok: false, code: result.error.code } };
+        }
+        return { content: [{ type: "text", text: "Review allowed: no open writer lease." }], details: { ok: true } };
+      }
+
+      if (params.action === "acquire") {
+        if (!params.leaseId || !params.owner || !params.ownerRole || !params.phase || !params.worktreeKey || !params.allowedPaths?.length || !params.openedAt) {
+          return { content: [{ type: "text", text: "Lease acquire rejected: leaseId, owner, ownerRole, phase, worktreeKey, allowedPaths, and openedAt are required." }], details: { ok: false, code: "invalid-request" } };
+        }
+        const active = inProgressTicket(current);
+        if (!active) {
+          return { content: [{ type: "text", text: "Lease acquire rejected: no in-progress ticket." }], details: { ok: false, code: "invalid-transition" } };
+        }
+        const request: ActiveWriterLease = {
+          leaseId: params.leaseId,
+          worktreeKey: params.worktreeKey,
+          owner: params.owner,
+          ownerRole: params.ownerRole,
+          phase: params.phase,
+          ticketId: active.id,
+          attempt: active.attempts,
+          allowedPaths: params.allowedPaths,
+          openedAt: params.openedAt,
+          ...(params.fixBriefId ? { fixBriefId: params.fixBriefId } : {}),
+        };
+        const result = acquireBatchWriterLease(current, request, {
+          dispositions: params.dispositions as FindingDispositionEvidence[] | undefined,
+          fixBrief: params.fixBrief as FixBriefEvidence | undefined,
+          priorFixRounds: params.priorFixRounds,
+          implementationScopePaths: params.implementationScopePaths,
+        });
+        if (!result.ok) {
+          return { content: [{ type: "text", text: `Lease acquire rejected: ${result.error.code}: ${result.error.message}` }], details: { ok: false, code: result.error.code } };
+        }
+        persist();
+        setStatus(ctx);
+        return {
+          content: [{ type: "text", text: `Acquired writer lease ${result.lease!.leaseId} for ${active.id} (${result.lease!.ownerRole}/${result.lease!.phase}).` }],
+          details: { ok: true, lease: result.lease },
+        };
+      }
+
+      if (params.action === "close") {
+        if (!params.leaseId || !params.owner || !params.closedAt || !params.handoffFingerprint) {
+          return { content: [{ type: "text", text: "Lease close rejected: leaseId, owner, closedAt, and handoffFingerprint are required." }], details: { ok: false, code: "invalid-request" } };
+        }
+        const result = closeBatchWriterLease(current, {
+          leaseId: params.leaseId,
+          owner: params.owner,
+          closedAt: params.closedAt,
+          handoffFingerprint: params.handoffFingerprint,
+        });
+        if (!result.ok) {
+          return { content: [{ type: "text", text: `Lease close rejected: ${result.error.code}: ${result.error.message}` }], details: { ok: false, code: result.error.code } };
+        }
+        persist();
+        setStatus(ctx);
+        return {
+          content: [{ type: "text", text: `Closed writer lease ${result.closed!.leaseId}; handoff ${result.closed!.handoffFingerprint}.` }],
+          details: { ok: true, closed: result.closed, writerLeaseHistory: current.writerLeaseHistory ?? [] },
+        };
+      }
+
+      return { content: [{ type: "text", text: "Unknown lease action." }], details: { ok: false, code: "invalid-request" } };
     },
   });
 
