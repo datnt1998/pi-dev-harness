@@ -7,4 +7,4 @@ Use `/skill:engineering-workflow` phase `grill-with-docs` for:
 
 $ARGUMENTS
 
-Interview me one section at a time. Prefer recommended defaults. Capture shared language for `CONTEXT.md` and identify ADR-worthy decisions, but ask before writing substantial docs.
+Grill one decision at a time and wait for each answer. Look up repository/environment facts; put unresolved decisions to me with a recommended default. Capture shared language for `CONTEXT.md` and ADR-worthy decisions. Proceed only after I confirm shared understanding; ask before substantial doc writes outside the approved scope.

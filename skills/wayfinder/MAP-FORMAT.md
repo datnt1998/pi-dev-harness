@@ -1,4 +1,6 @@
-# Wayfinder Local Tracker Format
+# Wayfinder Local Decision-Map Format
+
+A **decision ticket** resolves one question that clears the route to the destination; it is not an implementation slice.
 
 Layout for one effort:
 

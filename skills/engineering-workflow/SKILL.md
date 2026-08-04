@@ -36,23 +36,22 @@ This skill supports these phases. The user may call a phase directly through pro
 
 ## Phase Router
 
-When the user asks broadly, choose the first applicable phase:
+When the user asks broadly, route specific on-ramps before the generic delivery flow:
 
-1. Ambiguous goal or many unknowns → `grill-with-docs`.
-2. Clear conversation but no written target → `to-spec`.
-3. Spec/plan exists but work is large → `to-tickets`.
-4. Approved ticket/spec exists → `implement`.
-5. Code changed or PR/diff needs checking → `code-review`.
-6. Bug/failure exists → `diagnose`.
-7. Session needs transfer/summary → `handoff`.
-8. The task is about Pi agent resources, packages, skills, prompts, extensions, themes, or harness architecture → use `/skill:pi-harness` first or alongside this workflow.
-9. Design question that needs a runnable answer (state model, UI variations) → `/skill:prototype`.
-10. Designing or restructuring a module's interface/seam → `/skill:codebase-design`. Actively scanning an existing codebase for shallow modules / deepening opportunities → `/improve-architecture` (codebase-design `ARCHITECTURE-REVIEW.md`).
-11. Domain terms are fuzzy, overloaded, or a hard-to-reverse decision needs recording → `/skill:domain-modeling`.
-12. Effort too big for one session, path still foggy (greenfield, oversized feature) → `/skill:wayfinder` — plan as a map of investigation tickets first; it merges back into this flow at `to-spec`. A practical tell: grilling keeps surfacing questions that each need their own session (≥3 times).
-13. Creating a repo doc, or a long-running project has accumulated stale specs/plans/reports / drifted docs → `/skill:repo-hygiene` — classify on creation, and sweep/triage into keep/reconcile/delete under "the codebase is truth".
-14. The user wants a design/architecture/workflow drawn on a canvas, or an ASCII sketch turned into a real diagram → `/skill:tldraw-diagrams` — installs tldraw offline if missing, then delegates to its operator skill.
-15. Refactoring or extending existing code that has weak/no tests (brownfield/legacy) → `implement` with `references/legacy-refactor.md` — characterize current behavior first, then change under a net.
+1. Bug, regression, flake, or performance failure → `diagnose`.
+2. Huge, foggy, multi-session effort → `/skill:wayfinder`; merge back at `to-spec` when the decision map is clear.
+3. Design uncertainty that needs a runnable answer (state/logic or UI) → `/skill:prototype`.
+4. Interface or seam design → `/skill:codebase-design`; an active scan for deepening opportunities → `/improve-architecture`.
+5. Fuzzy/overloaded domain terms or an ADR-worthy decision → `/skill:domain-modeling`.
+6. Pi resources, packages, skills, prompts, extensions, themes, or harness architecture → `/skill:pi-harness` first or alongside this workflow.
+7. Repository-doc lifecycle or drift cleanup → `/skill:repo-hygiene`.
+8. Canvas diagram request → `/skill:tldraw-diagrams`.
+9. Code changed or a PR/diff needs checking → `code-review`.
+10. Session needs transfer → `handoff`.
+11. Ambiguous goal or unresolved decisions → `grill-with-docs`.
+12. Clear conversation but no written target → `to-spec`.
+13. Spec/plan exists and needs execution slices → `to-tickets`.
+14. Approved ticket/spec exists → `implement`; for weakly tested brownfield code, also load `references/legacy-refactor.md` and pin current behavior first.
 
 ## Pi Harness Boundary
 

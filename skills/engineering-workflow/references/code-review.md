@@ -11,14 +11,19 @@ Resolve the review surface in this order:
 3. staged plus unstaged worktree diff (including relevant untracked files);
 4. files explicitly identified by the user when Git evidence is unavailable.
 
-Never assume the default branch is `main`. Use three-dot diff for branch comparison:
+Never assume the default branch is `main`. Resolve an explicit fixed point and fail fast before delegation:
 
 ```bash
+git rev-parse <fixed-point>
+if git diff --quiet <fixed-point>...HEAD; then
+  echo "empty diff" >&2
+  exit 1
+fi
 git diff <fixed-point>...HEAD
 git log <fixed-point>..HEAD --oneline
 ```
 
-Report which surface was reviewed. If none can be established, report the evidence gap instead of claiming a complete review.
+An invalid ref or empty requested diff stops the review before reviewers launch. Report which surface was reviewed. If none can be established, report the evidence gap instead of claiming a complete review.
 
 ## Axis 1 — Standards
 
@@ -31,22 +36,22 @@ Review against:
 - existing code style
 - smell baseline below
 
-Smell baseline:
+Smell baseline (what it is → usual direction):
 
-- Mysterious Name
-- Duplicated Code
-- Feature Envy
-- Data Clumps
-- Primitive Obsession
-- Repeated Switches
-- Shotgun Surgery
-- Divergent Change
-- Speculative Generality
-- Message Chains
-- Middle Man
-- Refused Bequest
+- **Mysterious Name** — a name hides its purpose → rename; if no honest name exists, inspect the design.
+- **Duplicated Code** — the same logic shape appears in multiple changed sites → extract the shared shape.
+- **Feature Envy** — behavior reaches into another module's data more than its own → move it toward the data.
+- **Data Clumps** — the same fields/parameters travel together → introduce one domain type.
+- **Primitive Obsession** — a primitive stands in for a domain concept → give the concept a type.
+- **Repeated Switches** — the same type cascade recurs → centralize the dispatch or use polymorphism.
+- **Shotgun Surgery** — one logical change scatters across many files → gather what changes together.
+- **Divergent Change** — one module changes for unrelated reasons → split responsibilities.
+- **Speculative Generality** — abstractions/hooks serve no approved need → remove or inline them.
+- **Message Chains** — callers navigate a long object chain → hide the walk behind the first module.
+- **Middle Man** — a module mostly delegates → call the real target or deepen the module.
+- **Refused Bequest** — an implementation ignores most inherited behavior → prefer composition.
 
-Treat smells as judgment calls, not hard failures, unless repo standards make them explicit.
+Repository standards override this baseline. Treat smells as judgment calls, not hard failures, and skip issues already enforced by tooling.
 
 ## Axis 2 — Spec
 

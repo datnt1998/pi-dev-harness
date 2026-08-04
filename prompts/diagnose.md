@@ -7,4 +7,4 @@ Use `/skill:engineering-workflow` phase `diagnose` for:
 
 $ARGUMENTS
 
-Follow the loop: reproduce → minimise → hypothesise → instrument → fix → regression-test. Do not jump to a fix before establishing evidence unless reproduction is impossible.
+Establish one tight, red-capable feedback-loop command, then follow reproduce → minimise → hypothesise → instrument → fix → regression-test. If no such loop can be built, stop with what was tried and the exact access, captured artifact, or temporary instrumentation needed.

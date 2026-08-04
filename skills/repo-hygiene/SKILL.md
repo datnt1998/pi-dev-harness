@@ -1,16 +1,17 @@
 ---
 name: repo-hygiene
-description: "Keep a repository's docs and working files honest under 'the codebase is the single source of truth': classify every artifact's lifecycle on creation, detect and reconcile doc/spec drift against code and ADRs, and delete finished plans/reports instead of hoarding them. Use when creating repo docs, when a long-running project accumulates stale specs/plans/reports, at handoff, or when asked to tidy/triage docs or fix documentation drift."
+description: "Keep repository docs and working files honest: classify artifact lifecycles on creation, detect drift against the correct authority, and delete finished plans/reports instead of hoarding them. Use when creating repo docs, at handoff, or when asked to tidy stale specs/plans/reports."
 ---
 
 # Repo Hygiene
 
-The codebase (code + tests) is the single source of truth. Every other file is a
-**map that points into the code, not an authority**. When a doc disagrees with the
-code, the code is right and the doc is a bug. Because an agent greps every file as
-equally authoritative and cannot tell a live file from a dead one, a wrong or stale
-file is *worse than a missing one*. This skill keeps the repo's non-code artifacts
-honest so they never poison agent context.
+Every artifact has a scoped authority. Code and tests describe current observable
+implementation; an approved spec or acceptance contract describes intended behavior
+until it is implemented or explicitly superseded; ADRs preserve decision history;
+`CONTEXT.md` owns domain vocabulary. When artifacts disagree, identify which authority
+owns the disputed claim before changing anything. A stale authoritative-looking file
+is worse than a missing one, so this skill keeps non-code context honest without
+rewriting requirements to match a buggy implementation.
 
 The lifecycle taxonomy (plan / report / spec / ADR) lives in
 `../engineering-workflow/references/artifact-lifecycle.md` — read it once; this skill
@@ -28,8 +29,9 @@ cannot, do not create the file.
 - **Authoritative or disposable?** Disposable/working artifacts go to a gitignored, grep-excluded area (e.g. `.scratch/`, `docs/plans/`, and `docs/specs/` when specs are local-only). Only ADRs, a thin context doc, and living specs earn an authoritative path.
 
 Corollaries: the durable decision from a plan belongs in an ADR, not the plan; a
-report is never committed; a living spec is edited or deleted *in the same change*
-that makes it drift; an ADR changes only via a new superseding ADR.
+report is never committed; a living spec changes only when approved intent changes
+or it is explicitly superseded—otherwise reconcile implementation to the governing
+spec; an ADR changes only via a new superseding ADR.
 
 ### 2. Sweep (reactive — when artifacts accumulate)
 
@@ -45,13 +47,15 @@ committed reports, or on explicit request (`/tidy-docs`). The sweep is
    there are **not git-recoverable**.
 2. **Classify** each file into plan / report / spec / ADR / unknown. `unknown` is a
    red flag: an unclassifiable authoritative-looking file is the core hazard.
-3. **Detect drift against the code.** For each *living* spec/context claim, check it
-   against the code and ADRs. A spec whose decision is already captured by a shipped
-   ADR is a duplicate source of truth — mark it superseded.
+3. **Detect drift against the correct authority.** Check implementation claims against
+   code/tests, intended-behavior claims against the approved spec/acceptance source,
+   decisions against ADRs, and terminology against `CONTEXT.md`. A shipped change that
+   fails its approved spec is a code finding, not permission to rewrite the spec.
 4. **Decide** per file, one of:
    - **keep** — living and accurate; leave it.
-   - **reconcile** — living but drifted; fix it to match the code in this change.
-   - **delete** — finished plan, committed/dead report, or spec superseded by an ADR.
+   - **reconcile** — update the non-authoritative side to the owning authority, or
+     escalate when the authority itself must be superseded.
+   - **delete** — finished plan, committed/dead report, or explicitly superseded spec.
      Prefer deleting over hoarding "just in case".
 5. **Escalate before destructive action.** Batch all proposed deletions/reconciles
    into **one** keep/reconcile/delete list for approval. Never auto-delete a

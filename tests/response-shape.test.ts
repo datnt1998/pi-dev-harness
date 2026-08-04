@@ -181,14 +181,15 @@ test("README credits upstream and documents the real git-tag install contract", 
   assert.match(readme, /skills\/engineering-workflow\/references\/response-shape\.md/);
   assert.match(readme, /evals\/response-quality\//);
   assert.match(readme, /35\/25\/20\/10\/10/);
-  // M7: the overlay is documented as an un-released candidate pending a real paired eval
+  // M7: a changed overlay is documented as an un-released candidate pending a real paired eval
   assert.match(readme, /candidate treatment/);
-  assert.match(readme, /must not be released/);
-  assert.match(readme, /no such run exists yet/i);
+  assert.match(readme, /must not be tagged\/published/);
+  assert.match(readme, /No such run exists yet for a new overlay candidate/i);
+  assert.match(readme, /byte-identical to the previous tag are outside this treatment gate/i);
   // the false npm@0.5.0 install examples are gone; no npm spec remains
   assert.doesNotMatch(readme, /npm:pi-dev-harness@0\.5\.0/);
   assert.doesNotMatch(readme, /npm:pi-dev-harness@/);
-  // the actual distribution contract: git tags, current v0.8.0
-  assert.match(readme, /git:github\.com\/datnt1998\/pi-dev-harness@v0\.8\.0/);
+  // the actual distribution contract: git tags, current v0.9.0
+  assert.match(readme, /git:github\.com\/datnt1998\/pi-dev-harness@v0\.9\.0/);
   assert.match(readme, /git tag/i);
 });

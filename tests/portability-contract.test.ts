@@ -43,7 +43,7 @@ test("generic release flow does not impose npm or a project-specific releases mo
 test("repo-hygiene enforces lifecycle classification, drift sweep, and safe deletion", () => {
   const skill = text("skills/repo-hygiene/SKILL.md");
   const prompt = text("prompts/tidy-docs.md");
-  assert.match(skill, /single source of truth/i);
+  assert.match(skill, /scoped authority|correct authority/i);
   assert.match(skill, /create-time gate/i);
   assert.match(skill, /keep\b.*reconcile.*delete|keep\s*\/\s*reconcile\s*\/\s*delete/i);
   assert.match(skill, /not git-recoverable/i);

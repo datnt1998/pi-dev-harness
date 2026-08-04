@@ -924,8 +924,9 @@ test("eval assets carry no medical naming, no holdout claims, and document the f
   // rev5 #3: the credential gate is anchored to a recorded start SHA and excludes only the seeded fixture
   assert.match(readme, /ci-logs\/leak\.log/i);
   assert.match(readme, /untracked/i);
-  // M7: the overlay candidate is not released on eval evidence that does not exist
+  // M7: changed overlay bytes are not released on eval evidence that does not exist
   assert.match(readme, /must not be released/i);
+  assert.match(readme, /byte-identical to the previous tag are outside this treatment gate/i);
   assert.match(rubric, /correctness.*35|35.*correctness/is);
   assert.match(rubric, /zero blockers/i);
   assert.match(rubric, /machine-evidence/i);

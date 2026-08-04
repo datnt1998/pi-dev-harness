@@ -38,8 +38,9 @@ Spec structure:
 
 Rules:
 
-- Do not invent requirements silently.
-- Mark unknowns explicitly.
+- Synthesize the current conversation and repository evidence; broad interviewing belongs in `grill-with-docs`.
+- Mark unknowns explicitly under `Open Questions` instead of inventing requirements.
+- Ask only when writing the spec would require an unapproved decision or a newly proposed test seam needs confirmation.
 - Keep acceptance criteria testable.
 - Include affected modules/files when known.
 - If the spec is based on conversation only, say so.
@@ -54,24 +55,23 @@ Default path:
 .scratch/<slug>/tickets.md
 ```
 
-Ticket structure:
+Ticket structure (the deterministic readiness gate is authoritative):
 
 ```markdown
 ## T1 — <title>
 
 Goal:
-
 Scope:
-
-Working directory: (recommended for monorepos)
-
-Blocking edges:
-
-Implementation notes:
-
+Working directory: (optional for single-root; recommended for monorepos)
+Non-goals: (optional)
+Dependencies: none | T2, T3
+Acceptance criteria:
+- <testable observable outcome>
 Validation:
-
+- <repository-native command or manual flow>
+Risks: (optional)
 Done when:
+- <completion criterion>
 ```
 
 Tracer-bullet rules:
@@ -82,6 +82,16 @@ Tracer-bullet rules:
 - In monorepos, name the workspace/working directory and use its focused validation; add root-wide checks only when repository policy requires them.
 - Make dependencies explicit.
 - Avoid mega tickets like "build backend".
+
+### Wide-refactor branch
+
+A **wide refactor** is one mechanical change whose blast radius spans many callers, so no ordinary vertical slice can stay green. Use **expand-contract** instead:
+
+1. **Expand** — add the new form beside the old without breaking callers.
+2. **Migrate** — move callers in bounded batches sized by blast radius; each batch depends on the expand ticket.
+3. **Contract** — remove the old form only after every migration ticket completes.
+
+When migration batches cannot stay green independently, use an integration branch and make them all block one final integrate-and-verify ticket. Do not force a wide refactor into fake tracer bullets.
 
 ## Issue Tracker
 

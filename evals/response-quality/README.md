@@ -171,7 +171,7 @@ Every response row and key row carries: case/trial identity, condition, provider
 
 ## Release status
 
-The runtime overlay change in `templates/` (the response-shape rules going always-loaded) is a **candidate treatment**. It must not be released — tagged or published — until a real paired baseline-vs-candidate run of this evaluation has been executed end-to-end against the released tag and passed `score` (exit 0). **No such run exists yet**; `results/` is intentionally empty. This harness ships no runner and never calls a provider, so the run requires an operator and real spend under the quota preflight above. Until then the overlay ships as a candidate, not an evidenced improvement.
+A release that changes `templates/APPEND_SYSTEM.md` makes those runtime-overlay bytes a **candidate treatment**. It must not be released — tagged or published — until a real paired baseline-vs-candidate run of this evaluation has been executed end-to-end against the previous released tag and passed `score` (exit 0). **No such run exists yet for a new overlay candidate**; `results/` is intentionally empty. Releases whose overlay is byte-identical to the previous tag are outside this treatment gate. This harness ships no runner and never calls a provider, so evaluating a changed overlay requires an operator and real spend under the quota preflight above.
 
 ## Lineage
 

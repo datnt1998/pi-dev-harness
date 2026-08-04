@@ -7,4 +7,4 @@ Use `/skill:engineering-workflow` phase `to-spec`.
 
 Scope: ${1:-current conversation}
 
-Create a concrete spec with goal, non-goals, requirements, acceptance criteria, risks, and validation plan. Ask only for missing information that blocks a useful spec.
+Synthesize the current conversation and repository evidence into a concrete spec with goal, non-goals, requirements, acceptance criteria, risks, validation plan, and explicit open questions. Do not restart the requirements interview. Ask only when publishing the spec would require an unapproved decision or a newly proposed test seam needs confirmation.

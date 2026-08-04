@@ -5,7 +5,7 @@ authoritative and cannot tell a live file from a dead one. A wrong or stale file
 is worse than a missing one. Before creating any document, assign its lifecycle
 and name who deletes it.
 
-## Lifecycle classes
+## Lifecycle classes and authority
 
 - **Plan** — ephemeral, single-use. The durable decision belongs in an ADR or a
   living context doc; the plan file itself is disposable. Delete when done; do
@@ -13,9 +13,14 @@ and name who deletes it.
 - **Report / analysis output** — do not commit. Throwaway analysis is
   session-only. Persistent batch/run state (manifests, readiness) may stay local
   across sessions but stays uncommitted and is never auto-deleted mid-run.
-- **Spec** — living. It must track the code. If it drifts, fix or delete it;
-  never leave it stale.
-- **ADR** — immutable. Change via a new superseding ADR, never in place.
+- **Spec** — living authority for intended behavior and acceptance until the work
+  is implemented or the spec is explicitly superseded. If code disagrees with an
+  approved spec, treat that as an implementation finding; do not rewrite the spec
+  to legitimize incomplete or buggy code.
+- **ADR** — immutable authority for decision history. Change via a new superseding
+  ADR, never in place.
+- **Code and tests** — authority for current observable implementation.
+- **`CONTEXT.md`** — authority for domain vocabulary, not requirements or implementation.
 
 ## Physical separation
 
@@ -36,7 +41,7 @@ trigger, and the plan plus its contract test are deleted with the final slice.
 - Assign a lifecycle before you create the file; if you cannot, do not create it.
 - Prefer deleting a finished artifact over hoarding it.
 - Never resurrect a finished plan/report into an authoritative path.
-- When a living spec drifts from code, reconcile or delete in the same change.
+- When a living spec and code diverge, identify whether implementation or intent is wrong. Reconcile the non-authoritative side, or supersede the governing authority explicitly.
 
 This file is the *taxonomy*. For the active create-time gate, the periodic
 drift sweep (inventory → classify → detect drift → keep/reconcile/delete), the

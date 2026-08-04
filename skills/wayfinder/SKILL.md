@@ -1,11 +1,11 @@
 ---
 name: wayfinder
-description: "Plan a huge, foggy chunk of work — more than one agent session can hold — as a shared map of investigation tickets under .scratch/, resolved one per session until the way to the destination is clear. Use when the user invokes /wayfinder, has a greenfield project or oversized feature idea, or when grilling keeps surfacing questions that each need their own session."
+description: "Plan a huge, foggy chunk of work — more than one agent session can hold — as a shared map of decision tickets under .scratch/, resolved until the way to the destination is clear. Use for a greenfield project, oversized feature, or grilling that keeps surfacing session-sized questions."
 ---
 
 # Wayfinder
 
-A loose idea has arrived — too big for one agent session, and wrapped in fog: the way from here to the **destination** isn't visible yet. Wayfinding is about finding that way, not charging at the destination. This skill charts the way as a **shared map** in the repo, then works its tickets one at a time until the route is clear.
+A loose idea has arrived — too big for one agent session, and wrapped in fog: the way from here to the **destination** isn't visible yet. Wayfinding is about finding that way, not charging at the destination. This skill charts the way as a **shared map** in the repo, then works its **decision tickets** — questions whose resolution informs the route rather than slices of the build — until the route is clear.
 
 Adapted for Pi from mattpocock/skills (MIT). Uses a local markdown tracker; formats live in `MAP-FORMAT.md` (same directory).
 
@@ -44,7 +44,7 @@ Each ticket is one **question**, sized to one agent session. Status, type, block
 Every ticket is **HITL** (worked *with* the user — the agent never answers the user's side itself) or **AFK** (agent-driven):
 
 - **research** (AFK): investigate against primary sources; delegate to the `researcher` subagent with `pi-web-access`; output a cited markdown file linked from the ticket.
-- **prototype** (HITL): raise discussion fidelity with a cheap runnable artifact via `/skill:prototype`; link the prototype branch as an asset. Use when "how should it look/behave" is the question.
+- **prototype** (HITL): raise discussion fidelity with a cheap runnable artifact via `/skill:prototype`. Record the verdict; link a preserved prototype branch only when the user explicitly approves that capture. Use when "how should it look/behave" is the question.
 - **grilling** (HITL, the default): interview via `/grill-with-docs`, with `/skill:domain-modeling` maintaining `CONTEXT.md`/ADRs inline.
 - **task** (HITL or AFK): manual work that must happen before a decision can be made (sign up for a service, provision access, move data). The one type that *does* — and it earns its place by unblocking a decision. The answer records what was done and any resulting facts later tickets depend on.
 
@@ -55,7 +55,7 @@ The map is _deliberately_ incomplete: don't chart what you can't yet see. **Not 
 **Fog or ticket?** The test is whether you can state the question precisely **now** — not whether you can answer it now.
 
 - **Ticket when** the question is sharp — even if blocked.
-- **Fog when** you can't phrase it that sharply. Don't pre-slice fog into ticket-sized pieces; one patch may graduate into several tickets, or none.
+- **Fog when** you can't phrase it that sharply. Don't pre-slice fog into ticket-sized pieces; one area of fog may graduate into several tickets, or none.
 
 ## Out of scope
 
@@ -63,15 +63,16 @@ The destination fixes the scope; work beyond it is out of scope — not fog. Whe
 
 ## Invocation
 
-Two modes. Either way, **never resolve more than one ticket per session** — this pairs with autocompact and `/handoff` for session hygiene.
+Two modes. Human-worked tickets resolve one per session; newly charted AFK research tickets are the sole exception and may run in parallel through `researcher`.
 
 ### Chart the map (user brings a loose idea)
 
 1. **Name the destination.** Run `/grill-with-docs` (+ `/skill:domain-modeling`) to pin down what this map is finding its way to. The destination fixes the scope, so it's settled first.
 2. **Map the frontier.** Grill again, **breadth-first**: fan out across the whole space, surfacing open decisions and first takeable steps. **If this surfaces no fog** — the journey fits one session — you don't need a map. Stop and suggest the normal flow (`/to-spec` or direct implement).
 3. **Create the map** at `.scratch/<effort>/map.md`: Destination and Notes filled, Decisions empty, fog sketched into Not yet specified.
-4. **Create the tickets you can specify now**, then wire `blocked-by` edges in a **second pass** (tickets need ids before they can reference each other).
-5. Stop — charting is one session's work; do not also resolve tickets.
+4. **Create the decision tickets you can specify now**, then wire `blocked-by` edges in a **second pass** (tickets need ids before they can reference each other).
+5. Claim each newly created `research` ticket in its frontmatter, then launch the claimed set through the Pi `researcher` route when `pi-subagents`/web access is available. Save cited notes under the effort's `assets/` directory and link them from the ticket; otherwise leave the ticket open on the frontier with the missing capability recorded.
+6. Stop — charting is one session's work; do not also resolve HITL tickets.
 
 ### Work through the map (user brings a map path, ticket optional)
 

@@ -68,7 +68,7 @@ Give the user the run command. They'll drive it themselves; the interesting mome
 
 ### 7. Capture the answer and the prototype
 
-Once the prototype has answered its question, capture the answer, then capture the prototype the way the [SKILL](SKILL.md) describes. The logic-specific mapping: the validated reducer / machine / function set lifts into the real module (the decision, absorbed); the TUI shell rides along to the throwaway branch that keeps the prototype as a primary source.
+Once the prototype has answered its question, capture the answer, then follow the permission-gated capture rule in [SKILL](SKILL.md). The validated reducer / machine / function set lifts into the real module. Preserve the TUI shell on a throwaway branch only when the user explicitly approves and it is worth keeping as a primary source; otherwise delete it after recording the decision.
 
 ## Anti-patterns
 

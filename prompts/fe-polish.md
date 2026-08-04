@@ -27,8 +27,7 @@ transition properties). Discover and enforce the repository's visual, copy, acce
 
 ## Discipline
 
-- Inspect before editing; keep edits small and reversible; files ≤200 lines
-  (extract modules/components when over).
+- Inspect before editing; keep edits small and reversible; follow the repository's file/module size conventions instead of imposing a universal line limit.
 - Pure logic changes belong in `.ts` seams with unit tests; hooks/JSX stay thin.
 - Do NOT add `useMemo`/`useCallback`/`memo` without pointing at the concrete
   re-render or identity problem it fixes.
@@ -39,6 +38,4 @@ transition properties). Discover and enforce the repository's visual, copy, acce
 1. Findings + changes as Before/After tables grouped by principle/rule
    (cite `file:line`; include every change).
 2. Validation: discover and run the affected frontend/workspace's repository-native test and build checks; do not assume npm. Note commands and counts.
-3. Commit-ready checkpoint per `/skill:git-rules` — propose a Conventional
-   Commit message (`polish(scope): ...` or `perf(scope): ...`), do not commit
-   without confirmation.
+3. Commit-ready checkpoint per `/skill:git-rules` — propose a documented Conventional Commit type such as `style`, `perf`, `fix`, or `refactor`; do not commit without confirmation.

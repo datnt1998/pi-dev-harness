@@ -1,6 +1,6 @@
 ---
 name: prototype
-description: "Build a throwaway prototype to answer a design question. Use when the user wants to sanity-check whether a state model or logic feels right, explore what a UI should look like, compare UI variations, or feel out an API shape before writing it for real."
+description: "Build a throwaway prototype to answer a design question. Use when the user wants to sanity-check whether a state model or logic feels right, or explore and compare what a UI should look like."
 ---
 
 # Prototype
@@ -25,4 +25,4 @@ The two branches produce very different artifacts — getting this wrong wastes 
 3. **No persistence by default.** State lives in memory. Persistence is the thing the prototype is _checking_, not something it should depend on. If the question explicitly involves a database, hit a scratch DB or a local file with a clear "PROTOTYPE — wipe me" name.
 4. **Skip the polish.** No tests, no error handling beyond what makes the prototype _runnable_, no abstractions. The point is to learn something fast.
 5. **Surface the state.** After every action (logic) or on every variant switch (UI), print or render the full relevant state so the user can see what changed.
-6. **Capture it when done.** Fold any validated decision into the real code, then capture the prototype itself as a **primary source**: commit it to a throwaway branch outside the repository's default/production branch, and leave a context pointer to that branch on the implementation ticket/spec. Capture the answer too — the verdict and the question it settled. The main branch keeps only the validated decision.
+6. **Capture the answer when done.** Record the verdict and the question it settled in the implementation ticket/spec. The main branch keeps only the validated decision. If the prototype itself is valuable as a **primary source**, offer a user-approved capture mechanism such as a throwaway branch and context pointer; branch creation and commits still require explicit permission under `/skill:git-rules`.

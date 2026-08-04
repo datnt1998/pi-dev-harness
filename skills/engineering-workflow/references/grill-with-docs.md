@@ -4,18 +4,19 @@ Use this phase when the desired change is unclear, broad, high-risk, or domain-l
 
 ## Goals
 
-- Align with the user before implementation.
-- Convert fuzzy intent into concrete decisions.
+- Reach shared understanding before implementation.
+- Convert fuzzy intent into concrete human decisions.
 - Build shared language that reduces future verbosity.
 - Capture important decisions as ADRs.
 
 ## Process
 
 1. State the current understanding in 3-5 bullets.
-2. Ask focused questions one section at a time.
-3. Prefer recommended defaults so the user can answer quickly.
-4. Stop grilling when the remaining ambiguity no longer blocks safe progress.
-5. Draft doc changes and ask before writing if they are substantial.
+2. **Grill one decision at a time.** Walk the decision tree in dependency order and wait for the user's answer before continuing.
+3. Look up repository/environment **facts** instead of asking the user. Put every unresolved product, scope, API, architecture, or data **decision** to the user with a recommended default.
+4. Update the shared domain model as terms and durable decisions crystallise.
+5. Summarize the resolved model and ask the user to confirm shared understanding.
+6. Proceed to docs or the next delivery phase only after that confirmation. Draft substantial doc writes for approval when they fall outside the already approved scope.
 
 ## Question Areas
 
