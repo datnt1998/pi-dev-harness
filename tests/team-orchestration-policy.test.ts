@@ -8,6 +8,7 @@ const text = (path: string) => readFileSync(resolve(root, path), "utf8");
 
 const reusablePaths = [
   "lib/team-orchestration-protocol.ts",
+  "lib/team-orchestration-pilot.ts",
   "extensions/ticket-runner.ts",
   "skills/batch-implementation/SKILL.md",
   "skills/engineering-workflow/references/code-review.md",
@@ -46,6 +47,21 @@ test("batch and runtime require eligibility routing, exclusive writer leases, an
   assert.match(runtime, /Parent implementation after delegation must be explicit rework/i);
   assert.match(runtime, /self-asserted closed leases are rejected/i);
   assert.match(runtime, /action: StringEnum\(\["acquire", "close", "reconcile", "review_allowed"\]/i);
+});
+
+test("runtime and normative callers expose generic pilot evidence and role-specific rollback", () => {
+  const policy = text("skills/engineering-workflow/references/delegation-policy.md");
+  const batch = text("skills/batch-implementation/SKILL.md");
+  const runtime = text("extensions/ticket-runner.ts");
+  const readme = text("README.md");
+  for (const [name, value] of [["policy", policy], ["batch", batch], ["runtime", runtime], ["readme", readme]] as const) {
+    for (const required of ["pilot", "parent writer", "degrad", "evidence"]) assert.match(value, new RegExp(required, "i"), `${name}: ${required}`);
+  }
+  assert.match(policy, /production.*strictly lower/i);
+  assert.match(policy, /arbitration.*production numerator/i);
+  assert.match(batch, /Deterministic fixtures.*never promote/i);
+  assert.match(runtime, /batch_worker_lane/i);
+  assert.match(readme, /ten clean primary real assignments/i);
 });
 
 test("reusable T4 paths retain provider and model route portability", () => {

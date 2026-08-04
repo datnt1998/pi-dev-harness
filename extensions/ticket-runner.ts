@@ -7,6 +7,7 @@ import { CONTINUATION_EVENT, continuationRegistry } from "../lib/continuation-ev
 import { manifestSource, parseImplementArgs } from "../lib/ticket-runner-input.ts";
 import { analyzeBatch, fingerprint, isRunnable, parseTickets } from "../lib/ticket-readiness.ts";
 import type { ActiveWriterLease, FixBriefEvidence, FindingDispositionEvidence } from "../lib/team-orchestration-protocol.ts";
+import { effectiveWriterLane, renderPilotReport, renderPilotStatus } from "../lib/team-orchestration-pilot.ts";
 import {
   acquireBatchWriterLease,
   applyEvidencedOutcome,
@@ -50,13 +51,15 @@ function repoScripts(ctx: ExtensionContext): string[] {
 function statusReport(state: BatchRunState, verbose = false): string {
   const s = summarize(state);
   const summary = `batch ${state.batchId} · ${s.completed}/${state.tickets.length} done · q${s.queued}/run${s.in_progress}/fail${s.failed}/block${s.blocked}/decision${s.needs_decision}/skip${s.skipped} · stop=${stopReason(state)} · commit=${state.commit}`;
-  if (!verbose) return summary;
+  const pilot = state.pilotLedger ? `\n${verbose ? renderPilotReport(state.pilotLedger, state.workerLaneControl) : renderPilotStatus(state.pilotLedger, state.workerLaneControl)}` : "";
+  if (!verbose) return summary + pilot;
   return [
     summary,
     `source: ${state.source}`,
     `continuations ${state.continuationsUsed}/${state.maxContinuations}`,
     ...state.tickets.map((ticket) => `  ${ticket.id} ${ticket.status}${ticket.note ? ` — ${ticket.note}` : ""}${recoveryGuidance(ticket) ? ` — ${recoveryGuidance(ticket)}` : ""}`),
-  ].join("\n");
+    state.pilotLedger ? renderPilotReport(state.pilotLedger, state.workerLaneControl) : "",
+  ].filter(Boolean).join("\n");
 }
 
 function sourceIsCurrent(ctx: ExtensionContext, state: BatchRunState): boolean {
@@ -473,6 +476,30 @@ export default function (pi: ExtensionAPI) {
       }
 
       return { content: [{ type: "text", text: "Unknown lease action." }], details: { ok: false, code: "invalid-request" } };
+    },
+  });
+
+  pi.registerTool({
+    name: "batch_worker_lane",
+    label: "Batch Worker Lane Control",
+    description: "Show or set generic worker-writer lane control. Demoted/disabled selection returns to the parent writer while evidence and review gates remain active.",
+    parameters: Type.Object({ mode: Type.Optional(StringEnum(["enabled", "demoted", "disabled"] as const)), reason: Type.Optional(Type.String()), locator: Type.Optional(Type.String()) }),
+    async execute(_id, params, _signal, _onUpdate, ctx) {
+      reconstruct(ctx);
+      if (!current) return { content: [{ type: "text", text: "No active ticket batch." }], details: {} };
+      if (params.mode === "enabled") current.workerLaneControl = { mode: "enabled" };
+      else if (params.mode) {
+        if (!params.reason || !params.locator) return { content: [{ type: "text", text: "Worker lane change rejected: demoted/disabled requires reason and locator; operator consequence is recorded explicitly." }], details: { ok: false, code: "invalid-request" } };
+        current.workerLaneControl = {
+          mode: params.mode,
+          reason: params.reason,
+          locator: params.locator,
+          operatorConsequence: "Select the parent writer for this role while evidence protocol, decision packets, sealed reviews, and degradation reporting remain active.",
+        };
+      }
+      persist(); setStatus(ctx);
+      const control = current.workerLaneControl ?? { mode: "enabled" as const };
+      return { content: [{ type: "text", text: `Worker lane ${control.mode}; requested worker resolves to ${effectiveWriterLane(control, "worker")}.` }], details: { control } };
     },
   });
 

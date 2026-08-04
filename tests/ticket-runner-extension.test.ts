@@ -232,6 +232,25 @@ test("extension instances do not leak reconstructed state", async () => {
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });
 
+test("worker-lane control requires replay evidence and persists parent-writer fallback", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "ticket-runner-"));
+  try {
+    const source = join(dir, "tickets.md"); const raw = "# tickets\n"; writeFileSync(source, raw);
+    const state = createRunState({ batchId: "b", source, fingerprint: fingerprint(raw), order: ["T1"], tickets: [{ id: "T1", dependencies: [] }], now: 1 });
+    const pi = fakePi(); pi.entries.push({ type: "custom", customType: "ticket-batch-state", data: state });
+    ticketRunner(pi as never); const ctx = context(dir, pi);
+    for (const handler of pi.handlers.session_start) handler({}, ctx);
+    const rejected = await pi.tools.batch_worker_lane.execute("x", { mode: "disabled" }, undefined, undefined, ctx);
+    assert.match(rejected.content[0].text, /requires reason and locator/);
+    const disabled = await pi.tools.batch_worker_lane.execute("x", { mode: "disabled", reason: "T2 threshold", locator: "pilot:T2" }, undefined, undefined, ctx);
+    assert.match(disabled.content[0].text, /resolves to parent/);
+    assert.equal(pi.entries.at(-1).data.workerLaneControl.mode, "disabled");
+    assert.match(pi.entries.at(-1).data.workerLaneControl.operatorConsequence, /parent writer/);
+    const enabled = await pi.tools.batch_worker_lane.execute("x", { mode: "enabled" }, undefined, undefined, ctx);
+    assert.match(enabled.content[0].text, /resolves to worker/);
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
 test("verbose legacy status gives recovery guidance through the real extension", async () => {
   const dir = mkdtempSync(join(tmpdir(), "ticket-runner-"));
   try {

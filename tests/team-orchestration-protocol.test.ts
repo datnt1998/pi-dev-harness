@@ -466,6 +466,24 @@ test("fix leases require parent dispositions, one ordinary round, and escalation
   assert.equal(parseTeamOrchestrationEnvelope(escalate).ok, true);
 });
 
+test("malformed or outcome-contradictory pilot metrics fail closed at the protocol seam", () => {
+  const value = envelope() as any;
+  value.pilotMetrics = {};
+  assert.equal(parseTeamOrchestrationEnvelope(value).ok, false);
+
+  const contradictory = envelope() as any;
+  contradictory.requestedOutcome = "retry";
+  contradictory.pilotMetrics = {
+    primary: true, realWork: true, testBar: "test-bar", attribution: "verified", usageAttribution: "verified",
+    falseClaims: [], parentRework: [], parentValidationDiagnostic: "validation:1",
+    productionScarcePremiumCalls: 1, arbitrationScarcePremiumCalls: 0, meteredSpend: 1,
+    flatFeeOutputTokens: 0, flatFeePrice: 0, latencyMs: 10, baselineLocator: "baseline:1",
+    baselineMatched: true, baselineProductionScarcePremiumCallsPerTicket: 2, baselineLatencyMs: 20,
+    routeSnapshotLocator: "route:1", terminalOutcome: "completed",
+  };
+  assert.equal(parseTeamOrchestrationEnvelope(contradictory).ok, false);
+});
+
 test("eligibility reason codes require consistent tiny-known and isolation facts", () => {
   const tiny = envelope();
   assert.equal(parseTeamOrchestrationEnvelope(tiny).ok, true);

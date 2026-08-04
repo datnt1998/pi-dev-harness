@@ -34,6 +34,13 @@ test("delegation policy preserves the complete normative decision surface", () =
   ]) assert.match(policy, new RegExp(required.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i"), required);
 });
 
+test("delegation policy defines the pilot window, accounting, and operator consequences", () => {
+  const policy = text("skills/engineering-workflow/references/delegation-policy.md");
+  for (const required of ["versioned ledger", "six test-bar", "two no-test-bar", "strictly lower", "arbitration calls", "operator consequence", "Deterministic fixtures", "restore", "parent writer"]) {
+    assert.match(policy, new RegExp(required, "i"), required);
+  }
+});
+
 test("delegation policy uses portable model-tier archetypes rather than vendor routing", () => {
   const policy = text("skills/engineering-workflow/references/delegation-policy.md");
 

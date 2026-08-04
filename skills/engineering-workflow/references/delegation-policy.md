@@ -16,6 +16,12 @@ This policy uses capability/cost archetypes rather than model names:
 
 A configured model is mapped to one archetype outside this document. Routing by role name alone is forbidden.
 
+## Pilot ledger and role-specific rollback
+
+For an approved worker-writer pilot, retain each operational assignment in a versioned ledger. The decision window closes on the first ten clean, real, primary worker assignments, including at least six test-bar and two no-test-bar assignments; later rows cannot rewrite it. Fallback, unknown attribution or usage/thinking, degraded provider diversity, and silent-thinking contamination remain recorded but are excluded and replaced. The serial control loop is **producer → parent gate → two sealed axes → one fix round → pilot ledger**.
+
+Evaluate quality before cost: a cost win requires production scarce-premium calls per ticket to be strictly lower than the matched baseline; equal cost is quality-qualified opt-in only, and wall-clock is only a tiebreaker. Keep arbitration calls out of the production numerator. Missing numbers are `unknown`; a zero-price flat-fee observation is `unpriced`, never a zero-dollar claim. Trigger records must state the trigger, action, operator consequence, and replay locator. T1/T2/T3/T4 revert only the implicated role to its dated route snapshot; when that role is the worker, restore the parent writer. T5 repairs the implicated scarce-premium role configuration immediately and replaces the contaminated row rather than treating it as model-quality evidence. Evidence protocol, decision packets, sealed review axes, and degradation reporting stay active. Deterministic fixtures test this policy and never promote a route.
+
 ## 2. Parent launch preflight
 
 Before every non-trivial delegation, the parent must:

@@ -31,6 +31,7 @@ import {
   type TeamOrchestrationEnvelopeV1,
   type WriterLeaseEvidence,
 } from "./team-orchestration-protocol.ts";
+import { createPilotLedger, derivePilotRow, isPilotLedger, isWorkerLaneControl, recordPilotRow, type PilotLedger, type WorkerLaneControl } from "./team-orchestration-pilot.ts";
 
 export type AcceptedReportRecord = {
   attempt: number;
@@ -84,6 +85,10 @@ export type BatchRunState = {
    * at most one fix phase proof across resume/reconstruction.
    */
   writerLeaseHistory?: WriterLeaseEvidence[];
+  /** Generic persisted pilot observations; incomplete rows are retained by the pilot module. */
+  pilotLedger?: PilotLedger;
+  /** Disabling or demoting affects only worker writer selection. */
+  workerLaneControl?: WorkerLaneControl;
   createdAt: number;
   updatedAt: number;
 };
@@ -200,6 +205,8 @@ function isBatchRunStateUnchecked(value: unknown): value is BatchRunState {
       fixRoundsByAttempt.set(key, count);
     }
   }
+  if (state.pilotLedger !== undefined && !isPilotLedger(state.pilotLedger)) return false;
+  if (state.workerLaneControl !== undefined && !isWorkerLaneControl(state.workerLaneControl)) return false;
   if (state.decisionIndex !== undefined) {
     if (!Array.isArray(state.decisionIndex)) return false;
     const indexedPackets = new Map<string, DecisionPacket>();
@@ -411,6 +418,9 @@ export function acquireBatchWriterLease(
 ): WriterLeaseMutationResult {
   const active = inProgressTicket(state);
   if (!active) return { ok: false, error: { code: "invalid-transition", message: "A writer lease requires an in-progress ticket." } };
+  if (request.ownerRole === "worker" && state.workerLaneControl && state.workerLaneControl.mode !== "enabled") {
+    return { ok: false, error: { code: "invalid-request", message: "Worker lane is demoted or disabled; select the parent writer." } };
+  }
   const inspection = inspectPersistedWriterLease(state.activeWriterLease, {
     ticketStatuses: Object.fromEntries(state.tickets.map((ticket) => [ticket.id, ticket.status])),
     inProgressTicketId: active.id,
@@ -654,9 +664,20 @@ export function applyEvidencedOutcome(state: BatchRunState, id: string, reportVa
     pendingEvidence: outcome === "retry" ? structuredClone(report) : prior.pendingEvidence && structuredClone(prior.pendingEvidence),
     pendingDecision: outcome === "needs_decision" ? structuredClone(mergedPacket!) : prior.pendingDecision && structuredClone(prior.pendingDecision),
   };
+  let nextPilotLedger = state.pilotLedger;
+  if (report.eligibility.lane === "worker" && report.eligibility.pilotMember) {
+    try {
+      nextPilotLedger = recordPilotRow(state.pilotLedger ?? createPilotLedger(), derivePilotRow(report, report.pilotMetrics));
+    } catch {
+      return { ok: false, error: { code: "invalid-report", message: "Pilot evidence could not be retained safely." } };
+    }
+  }
   const transitioned = applyOutcome(state, id, outcome, reportNote({ ...report, decisionPacket: mergedPacket }));
   if (!transitioned) return { ok: false, error: { code: "invalid-transition", message: "Ticket could not transition." } };
   transitioned.evidence = evidence;
+  // A pilot-member worker report always becomes a retained row. Missing metrics
+  // deliberately derive an incomplete/non-clean row rather than fake telemetry.
+  state.pilotLedger = nextPilotLedger;
   state.decisionIndex = nextIndex;
   if (closedHandoff) {
     appendClosedLeaseHistory(state, closedHandoff);

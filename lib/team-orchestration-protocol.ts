@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { isPilotMetrics, type PilotMetrics } from "./team-orchestration-pilot.ts";
 
 /** The only evidence-envelope version understood by this package revision. */
 export const TEAM_ORCHESTRATION_PROTOCOL_VERSION = 1 as const;
@@ -306,6 +307,8 @@ export type TeamOrchestrationEnvelopeV1 = {
   decisionPacket?: DecisionPacket;
   /** Required on completion when the implementation lane was worker. */
   parentImplementationAfterDelegation?: ParentImplementationAfterDelegation;
+  /** Optional operational pilot observations. Runtime adapters retain absent data as incomplete rather than fabricating it. */
+  pilotMetrics?: PilotMetrics;
   parentGate: ParentGate;
 };
 
@@ -789,6 +792,7 @@ function hasRequiredEnvelopeShape(value: Record<string, unknown>): boolean {
     && (fix.escalatedInsteadOfSecondFix === undefined || typeof fix.escalatedInsteadOfSecondFix === "boolean")
     && (fix.escalationLocator === undefined || nonEmpty(fix.escalationLocator))
     && (value.parentImplementationAfterDelegation === undefined || validParentImplementationAfterDelegation(value.parentImplementationAfterDelegation))
+    && (value.pilotMetrics === undefined || isPilotMetrics(value.pilotMetrics))
     && object(fidelity) && object(fidelity.criteria) && ["C1", "C2", "C3", "C4", "C5", "C6", "C7"].every((key) => validCriterion(fidelity.criteria[key])) && Array.isArray(fidelity.claims) && fidelity.claims.every((claim) => object(claim) && nonEmpty(claim.claim) && nonEmpty(claim.locator) && nonEmpty(claim.verifiedBy))
     && object(diversity) && typeof diversity.degraded === "boolean" && (diversity.warning === undefined || validWarning(diversity.warning)) && (diversity.acknowledgment === undefined || validAcknowledgment(diversity.acknowledgment)) && Array.isArray(value.residualRisks) && value.residualRisks.every(nonEmpty)
     && ["completed", "retry", "failed", "blocked", "needs_decision"].includes(value.requestedOutcome as string)
@@ -816,6 +820,10 @@ export function parseTeamOrchestrationEnvelope(value: unknown): ProtocolValidati
   }
   if (value.requestedOutcome !== "needs_decision" && value.decisionPacket !== undefined) {
     return failure("invalid-decision-packet", "decisionPacket is legal only when requestedOutcome is needs_decision.", "decisionPacket");
+  }
+  const pilotMetrics = value.pilotMetrics as PilotMetrics | undefined;
+  if (pilotMetrics !== undefined && pilotMetrics.terminalOutcome !== value.requestedOutcome) {
+    return failure("malformed-envelope", "pilotMetrics.terminalOutcome must match requestedOutcome.", "pilotMetrics.terminalOutcome");
   }
 
   const childCarriers = [

@@ -207,6 +207,26 @@ test("retry, failed, and blocked require final-fingerprint parent rejection and 
   }
 });
 
+test("contradictory pilot terminal outcome is rejected before state mutation", () => {
+  const state = baseState(); startTicket(state, "T1");
+  const before = structuredClone(state);
+  const contradictory = report("retry");
+  contradictory.eligibility = {
+    ...contradictory.eligibility,
+    lane: "worker", reasonCode: "frozen-bounded-worker", pilotMember: true, tinyKnownDiff: false,
+  };
+  contradictory.pilotMetrics = {
+    primary: true, realWork: true, testBar: "test-bar", attribution: "verified", usageAttribution: "verified",
+    falseClaims: [], parentRework: [], parentValidationDiagnostic: "validation:1",
+    productionScarcePremiumCalls: 1, arbitrationScarcePremiumCalls: 0, meteredSpend: 1,
+    flatFeeOutputTokens: 0, flatFeePrice: 0, latencyMs: 10, baselineLocator: "baseline:1",
+    baselineMatched: true, baselineProductionScarcePremiumCallsPerTicket: 2, baselineLatencyMs: 20,
+    routeSnapshotLocator: "route:1", terminalOutcome: "completed",
+  };
+  assert.equal(applyEvidencedOutcome(state, "T1", contradictory, "retry").ok, false);
+  assert.deepEqual(state, before);
+});
+
 test("valid retry, failed, and blocked reports transition only after their evidence gate", () => {
   for (const outcome of ["retry", "failed", "blocked"] as const) {
     const state = baseState(); startTicket(state, "T1");
@@ -686,4 +706,20 @@ test("fix lease acquisition requires parent dispositions and blocks a second ord
   }, { dispositions, fixBrief: brief, priorFixRounds: 1 });
   assert.equal(second.ok, false);
   if (!second.ok) assert.equal(second.error.code, "fix-round-exhausted");
+});
+
+test("pilot ledger and worker-lane control persist and fail closed", () => {
+  const state = baseState();
+  state.workerLaneControl = { mode: "disabled", reason: "T2 rework threshold", locator: "pilot:T2", operatorConsequence: "Use the parent writer while retaining evidence and review controls." };
+  assert.equal(isBatchRunState(structuredClone(state)), true);
+  startTicket(state, "T1");
+  const denied = acquireBatchWriterLease(state, { leaseId: "worker-1", worktreeKey: "active", owner: "worker", ownerRole: "worker", phase: "implementation", ticketId: "T1", attempt: 1, allowedPaths: ["lib/x.ts"], openedAt: "2026-01-01" });
+  assert.equal(denied.ok, false);
+  assert.equal(acquireBatchWriterLease(state, { leaseId: "parent-1", worktreeKey: "active", owner: "parent", ownerRole: "parent", phase: "implementation", ticketId: "T1", attempt: 1, allowedPaths: ["lib/x.ts"], openedAt: "2026-01-01" }).ok, true);
+  const malformed = structuredClone(state) as any;
+  malformed.workerLaneControl = { mode: "disabled" };
+  assert.equal(isBatchRunState(malformed), false);
+  const malformedLedger = structuredClone(state) as any;
+  malformedLedger.pilotLedger = { version: 1, rows: [{ clean: true, exclusionReasons: [] }] };
+  assert.equal(isBatchRunState(malformedLedger), false);
 });
