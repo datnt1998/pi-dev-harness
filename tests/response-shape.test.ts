@@ -188,7 +188,7 @@ test("README credits upstream and documents the real git-tag install contract", 
   // the false npm@0.5.0 install examples are gone; no npm spec remains
   assert.doesNotMatch(readme, /npm:pi-dev-harness@0\.5\.0/);
   assert.doesNotMatch(readme, /npm:pi-dev-harness@/);
-  // the actual distribution contract: git tags, current v0.7.0
-  assert.match(readme, /git:github\.com\/datnt1998\/pi-dev-harness@v0\.7\.0/);
+  // the actual distribution contract: git tags, current v0.8.0
+  assert.match(readme, /git:github\.com\/datnt1998\/pi-dev-harness@v0\.8\.0/);
   assert.match(readme, /git tag/i);
 });

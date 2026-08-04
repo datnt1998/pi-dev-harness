@@ -40,17 +40,17 @@ Keep product identity, test/build commands, release source, deploy trigger, them
 
 ## Install
 
-This package is distributed by git tag; there is no npm publish. The current release tag is `v0.7.0`.
+This package is distributed by git tag; there is no npm publish. The current release tag is `v0.8.0`.
 
 ```bash
 # User-scope local development: all projects use this checkout.
 pi install /absolute/path/to/pi-dev-harness
 
 # Pinned git tag, user scope (reproducible):
-pi install git:github.com/datnt1998/pi-dev-harness@v0.7.0
+pi install git:github.com/datnt1998/pi-dev-harness@v0.8.0
 
 # Team/project scope:
-pi install -l git:github.com/datnt1998/pi-dev-harness@v0.7.0
+pi install -l git:github.com/datnt1998/pi-dev-harness@v0.8.0
 ```
 
 Then `/reload`.
