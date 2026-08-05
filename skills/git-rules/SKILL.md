@@ -10,7 +10,7 @@ Use this skill whenever work reaches a commit boundary, especially after `/imple
 ## Core Policy
 
 1. **Never commit blindly**
-   - Do not run `git add .` unless the diff has been inspected and all changed files are intended.
+   - Do not run `git add .` unless the diff has been inspected, all changed files are intended, and they belong to one commit under the Classify split rules.
    - Do not commit secrets, `.env`, local temp files, logs, or unrelated generated output.
    - Do not commit unless the user explicitly asked for a commit or confirms the proposed commit.
 
@@ -46,6 +46,13 @@ If the repo has no `.git`, say so and skip commit actions.
 
 ### 2. Classify
 
+When the intended changes mix Conventional types or scopes (code + docs, feat + fix, deps/config + code), split before staging:
+
+- Group the files in `git status --short` by Conventional type + scope, using per-path `git diff` to confirm each file's classification.
+- Propose one sequential commit per group, staging each group precisely (explicit paths or `git add -p`).
+- Never blanket-stage (`git add -A` or `git add .`) to analyze a mixed diff — analysis starts from `git status --short` and per-path diffs, not from a staged snapshot.
+- There is no numeric file-count or line-count threshold for deciding to split; classify by type/scope mixing, not size.
+
 Use Conventional Commit type:
 
 - `feat` — user-visible feature
@@ -77,6 +84,14 @@ feat(auth): add session revocation
 fix(api): reject malformed pagination tokens
 chore(harness): refresh reusable workflow resources
 ```
+
+Subject line rules:
+
+- 72 characters or fewer.
+- Imperative mood ("add", not "added" or "adds").
+- No trailing period.
+- Describe WHAT changed, not HOW it was implemented.
+- Never include AI attribution, an AI co-author trailer, or a tool advertisement in the subject or body.
 
 ### 4. Stage precisely
 
@@ -122,7 +137,21 @@ Commit now? (`yes`/`no`)
 
 ## Safety Gates
 
-Ask before commit if:
+### Secret scan
+
+Before proposing any commit, scan the staged diff mechanically:
+
+```bash
+git diff --cached | grep -iE "(AKIA|api[_-]?key|token|password|secret|credential|private[_-]?key|BEGIN [A-Z ]*PRIVATE KEY|mongodb://|postgres://|mysql://|redis://)"
+```
+
+Also check staged filenames for sensitive files: `.env*` (except `.env.example`), `*.key`, `*.pem`, `*.p12`, `credentials.json`, `secrets.json`.
+
+On any hit: block the commit proposal, show the matching lines, and suggest unstaging the file (`git reset HEAD <file>`) and adding it to `.gitignore`. A hit blocks the proposal pending human inspection — it does not block the underlying work, and patterns can false-positive on legitimate text (for example docs mentioning "token"); treat a hit as a required look, not an automatic verdict.
+
+The `safe-ops` extension guardrail complements this scan but does not replace it: `safe-ops` blocks risky writes as they happen, while this scan catches secret content that is already staged from any source.
+
+### Ask before commit
 
 - Untracked files exist and their purpose is unclear.
 - Diff includes Pi harness resources and product app code together.
@@ -138,3 +167,11 @@ Default to one terse checkpoint line. If commit permission is absent, propose th
 ## Merge/Rebase Conflicts
 
 When a merge or rebase is in progress with conflicts, read `references/merge-conflicts.md` (same directory): understand the intent of both sides from primary sources, preserve both intents where possible, never invent new behaviour, run checks, and finish the operation.
+
+## Error Recovery
+
+When a commit needs undoing, a merge/rebase needs aborting, or local changes need discarding, read `references/error-recovery.md` (same directory): every destructive recovery step requires explicit user confirmation, and already-pushed history is never rewritten.
+
+## Branching and Pull Requests
+
+For branch naming, lifecycle, force-push protection, remote-first PR comparisons, PR creation, and merge readiness gates, read `references/branching-and-pr.md` (same directory): every push, PR-create, merge, and branch-delete operation requires explicit user authorization, separate from and never implied by commit permission.
