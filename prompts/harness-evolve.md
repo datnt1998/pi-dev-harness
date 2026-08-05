@@ -30,7 +30,9 @@ Sort every finding into exactly one track:
 
 ## 3. Persist the backlog
 
-Create or update `.scratch/harness-evolution/backlog.md`:
+Create or update the registered effort `.scratch/harness-evolution/`. Ensure its
+`index.md` follows `/skill:engineering-workflow` → `references/scratch-organization.md`
+and links the canonical `backlog.md`:
 
 - One row per item: `id | track | finding (file:line) | risk | status (todo/doing/done/deferred)`.
 - Preserve existing rows; mark completed ones `done` with the commit hash.
@@ -40,7 +42,7 @@ Create or update `.scratch/harness-evolution/backlog.md`:
 
 - Apply **Maintenance** (low-risk) items now; keep edits small and reversible.
 - For **Consolidation / Capability / Packaging**, present one sequenced approval batch with recommended defaults; get confirmation once before large changes, not per item (per `/skill:pi-harness` Phase 0).
-- Never delete a resource without grepping the repo for references and checking `docs/plans/` for intentional design.
+- Never delete a resource without grepping the repo for references and checking the repository-declared durable design authorities plus the active registered `.scratch/<effort>/` for intentional in-progress work.
 
 ## 5. Validate + checkpoint
 

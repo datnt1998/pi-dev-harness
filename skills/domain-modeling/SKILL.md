@@ -11,6 +11,12 @@ Adapted for Pi from mattpocock/skills (MIT). Pairs with `/grill-with-docs` (whic
 
 ## File structure
 
+Before creating or updating Markdown, follow
+`../engineering-workflow/references/scratch-organization.md`: resolve the repository-
+declared glossary and ADR authorities, protected/read-only paths, owner, consumer,
+and lifecycle. The paths below are fallbacks only when the repository has no declared
+convention.
+
 Most repos have a single context:
 
 ```
@@ -25,7 +31,11 @@ Most repos have a single context:
 
 If a `CONTEXT-MAP.md` exists at the root, the repo has multiple contexts; the map points to where each `CONTEXT.md` lives (see `CONTEXT-FORMAT.md`).
 
-Create files lazily — only when you have something to write. If no `CONTEXT.md` exists, create one when the first term is resolved. If no `docs/adr/` exists, create it when the first ADR is needed.
+Create files lazily—only for a named future consumer and after the creation gate.
+If no repository-declared glossary exists, fall back to `CONTEXT.md` when the first
+term is resolved. If no repository-declared ADR authority exists, fall back to
+`docs/adr/` when the first qualifying ADR is needed. Never mutate signed or read-only
+authorities; escalate instead.
 
 ## During the session
 
@@ -45,11 +55,14 @@ When domain relationships are being discussed, stress-test them with specific sc
 
 When the user states how something works, check whether the code agrees. If you find a contradiction, surface it: "Your code cancels entire Orders, but you just said partial cancellation is possible — which is right?"
 
-### Update CONTEXT.md inline
+### Update the glossary authority inline
 
-When a term is resolved, update `CONTEXT.md` right there. Don't batch these up — capture them as they happen. Use the format in `CONTEXT-FORMAT.md` (same directory).
+When a term is resolved, update the repository-declared glossary right there. Don't
+batch these up—capture them as they happen. Use `CONTEXT-FORMAT.md` when the authority
+is a `CONTEXT.md` file.
 
-`CONTEXT.md` should be totally devoid of implementation details. Do not treat `CONTEXT.md` as a spec, a scratch pad, or a repository for implementation decisions. It is a glossary and nothing else.
+A `CONTEXT.md` glossary should be totally devoid of implementation details. Do not
+treat it as a spec, scratch pad, or repository for implementation decisions.
 
 ### Offer ADRs sparingly
 

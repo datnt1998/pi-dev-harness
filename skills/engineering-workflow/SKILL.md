@@ -14,13 +14,13 @@ When the work involves changing Pi resources (`AGENTS.md`, `.pi/APPEND_SYSTEM.md
 ## Core Mindset
 
 1. **Alignment before action** — do not assume the user knows every edge case; interview when ambiguity matters.
-2. **Shared language** — maintain concise domain vocabulary in `CONTEXT.md` and decisions in ADRs.
+2. **Shared language** — maintain concise domain vocabulary and decisions in repository-declared glossary/ADR authorities; use `CONTEXT.md` and `docs/adr/` only as fallbacks.
 3. **Small feedback loops** — prefer tracer-bullet tickets, vertical slices, typecheck/test feedback, and red-green-refactor.
 4. **Separate generation from review** — implementation and review should be separate phases; use subagents where useful.
 5. **Commit-ready checkpoints** — after each successful implementation, use `/skill:git-rules` to inspect git state and propose a standards-compliant commit.
 6. **Handoff as a first-class artifact** — long work should end with a compact continuation note.
 7. **Approve once, execute fully** — approved reversible scope runs through implementation, validation, review, fixes, and checkpoint without intermediate confirmation. Read `references/autonomous-execution.md` when execution authority matters.
-8. **Every artifact has a lifecycle** — before creating any doc, classify it (plan=ephemeral, report=session-only, spec=living, ADR=immutable) and name who deletes it; a stale file is worse than a missing one. Read `references/artifact-lifecycle.md` for the taxonomy and use `/skill:repo-hygiene` for the active create-time gate and periodic drift sweep.
+8. **Every artifact has a lifecycle and canonical home** — default to chat; before creating a doc, name its consumer, artifact type, persistence tier, canonical path, owner, and deletion trigger. Cross-session working state uses one registered `.scratch/<effort>/` directory, never scattered files. Read `references/artifact-lifecycle.md` and `references/scratch-organization.md`; use `/skill:repo-hygiene` for enforcement and sweeps.
 
 ## Invocation Modes
 
@@ -70,7 +70,7 @@ Then return to this skill for normal engineering flow: spec, tickets, implementa
 
 Vocabulary and detour skills that run underneath or beside the phases:
 
-- `/skill:domain-modeling` — the active glossary/ADR discipline that `grill-with-docs` and `to-spec` drive; single source of truth for `CONTEXT.md` and ADR formats.
+- `/skill:domain-modeling` — the active glossary/ADR discipline that `grill-with-docs` and `to-spec` drive; it resolves repository-declared authorities before fallback `CONTEXT.md` and ADR formats.
 - `/skill:codebase-design` — deep-module vocabulary (module, interface, depth, seam, adapter, leverage, locality) for `implement`, `code-review`, and `diagnose` when architecture is the topic.
 - `/skill:prototype` — throwaway logic/UI prototypes when a question can't be settled in conversation; detour from `grill-with-docs`, bridged by `handoff`.
 - `/skill:wayfinder` — the planning layer above this flow for multi-session efforts: charts a map of grilling/prototype/research tickets under `.scratch/`, resolves one per session, then merges in at `to-spec`.
@@ -108,15 +108,15 @@ For two-axis review, use focused fresh-context reviewers:
 Read `references/grill-with-docs.md` when requirements are ambiguous or domain language is unclear.
 
 Output artifacts:
-- `CONTEXT.md` for shared vocabulary and domain model.
-- `docs/adr/NNNN-title.md` for important decisions.
+- Repository-declared glossary authority; fall back to `CONTEXT.md` when none exists.
+- Repository-declared ADR authority; fall back to `docs/adr/NNNN-title.md` when none exists.
 
 ### To Spec
 
 Read `references/spec-and-tickets.md`.
 
 Output artifacts:
-- `docs/specs/<slug>.md` or user-selected path.
+- Use the repository-declared living spec authority first; fall back to `docs/specs/<slug>.md` only when no convention exists, or use a user-selected path.
 - Include goal, non-goals, requirements, acceptance criteria, risks, and validation plan.
 
 ### To Tickets
@@ -124,7 +124,8 @@ Output artifacts:
 Read `references/spec-and-tickets.md`.
 
 Output artifacts:
-- `.scratch/<slug>/tickets.md` by default, unless the repo has an issue tracker convention.
+- `.scratch/<slug>/tickets.md` inside an existing/created registered effort by default, unless the repo has an issue tracker convention.
+- The effort must have `index.md` (or a Wayfinder `map.md`) and follow `references/scratch-organization.md`.
 - Tickets should be tracer bullets: small, end-to-end, independently verifiable.
 
 ### Implement
@@ -179,7 +180,8 @@ Load only when needed:
 - `references/delegation-policy.md` — normative subagent routing, launch, control, fidelity, and claim-verification contract.
 - `references/legacy-refactor.md` — brownfield safety: characterization/golden tests to pin current behavior before refactoring untested code.
 - `references/research.md` — source-backed research flow using `pi-web-access` and `researcher`.
-- `references/artifact-lifecycle.md` — lifecycle classes (plan/report/spec/ADR), physical separation of authoritative vs disposable files, and anti-drift rules.
+- `references/artifact-lifecycle.md` — lifecycle classes, authority boundaries, and anti-drift rules.
+- `references/scratch-organization.md` — create-time gate, canonical Markdown destinations, one-effort scratch layout, naming, orphan detection, and close-out.
 - `references/response-shape.md` — the single normative source for final user-facing prose shape; governs only the prose wrapper, never tool payloads, evidence records, commits, tickets/specs/ADRs, handoff structure, subagent briefs, or exhaustive findings.
 
 ## Done Criteria

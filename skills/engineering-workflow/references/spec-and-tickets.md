@@ -6,7 +6,8 @@ Use this reference for `to-spec` and `to-tickets` phases.
 
 Turn the current conversation, docs, and known constraints into a concrete spec.
 
-Default path:
+Canonical path: use the repository-declared living spec authority. Only when the
+repository has no established convention, fall back to:
 
 ```txt
 docs/specs/<slug>.md
@@ -55,6 +56,10 @@ Default path:
 .scratch/<slug>/tickets.md
 ```
 
+Before writing, reuse an existing effort for the same goal or create its required
+`index.md` per `scratch-organization.md`. Do not create standalone ticket files or a
+second dated/session-named effort for the same work.
+
 Ticket structure (the deterministic readiness gate is authoritative):
 
 ```markdown
@@ -95,7 +100,7 @@ When migration batches cannot stay green independently, use an integration branc
 
 ## Issue Tracker
 
-If `docs/agents/issue-tracker.md` exists, follow it. Otherwise use local markdown under `.scratch/`. During setup, add `.scratch/` to the project ignore policy unless the team intentionally versions workflow artifacts.
+If `docs/agents/issue-tracker.md` exists, follow it. Otherwise use local Markdown under one registered `.scratch/<effort>/` directory. During setup, add `.scratch/` to the project ignore policy unless the team intentionally versions workflow artifacts. A tracked scratch path requires an explicit repository exception; do not infer one from existing drift.
 
 ## Handoff
 

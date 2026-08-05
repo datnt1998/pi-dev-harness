@@ -31,12 +31,15 @@ Use this reference to create a continuation note for another session, agent, or 
 - Separate facts from recommendations.
 - Mention anything intentionally not done.
 - If context is large, link artifacts rather than pasting everything.
-- Before writing the handoff, close finished artifacts: delete ephemeral plans and session reports, and reconcile or delete any spec that drifted this session (`/skill:repo-hygiene`). Do not hand off dead files that will read as authoritative later.
+- Before writing the handoff, run the close-out in `scratch-organization.md`: inventory disposable/orphan/duplicate files, propose deletion, apply it only after explicit approval, consolidate retained evidence, and promote durable outcomes. Reconcile or supersede any governing artifact that changed this session (`/skill:repo-hygiene`). Do not hand off dead files that will read as authoritative later.
 
 ## Destination
 
-Default output is a response in chat. If the user asks for a file, use:
+Default output is a response in chat. If a named later consumer requires a file,
+update the one canonical handoff inside the active registered effort:
 
 ```txt
-.scratch/handoff-<slug>.md
+.scratch/<effort>/handoff.md
 ```
+
+Do not create dated, agent-named, or round-numbered handoff copies.

@@ -62,7 +62,10 @@ Non-measurable acceptance criteria are flagged and escalated to `NEEDS_DECISION`
 1. Read the ticket source file the user names.
 2. Read the project setup contract and repository-native validation commands. Pass `package.json` scripts as `repoScripts` when present; for other ecosystems preserve explicit ticket commands and do not invent an auto-fix.
 3. Resolve this skill's directory, then run `node --experimental-strip-types <skill-dir>/../../lib/gate-run.ts <tickets.md>`. It prints statuses, order, cycles, warnings, and fingerprint; non-zero means decisions/blockers remain. Do not create an ad-hoc classifier.
-4. Write two artifacts under `.scratch/<batch>/`:
+4. Route output through `../engineering-workflow/references/scratch-organization.md`.
+   Reuse the ticket source's registered `.scratch/<effort>/` when it is inside one;
+   otherwise create/reuse `.scratch/<batch>/` with the required `index.md`. Link both
+   artifacts from that registry:
    - `execution-manifest.md` — fingerprint header comment, ordered runnable tickets with normalized fields and recorded auto-fixes.
    - `readiness-report.md` — per-ticket status, issues, and auto-fixes; a summary count; and the list of tickets needing decisions or blocked.
 5. Deduplicate all `NEEDS_DECISION` questions into one numbered batch with affected tickets and recommended safe defaults. Report structural blockers without inventing fixes.

@@ -1,8 +1,12 @@
 # ADR Format
 
-ADRs live in `docs/adr/` and use sequential numbering: `0001-slug.md`, `0002-slug.md`, etc.
+ADRs live in the repository-declared ADR authority and follow its naming convention.
+When none exists, fall back to `docs/adr/` with sequential numbering:
+`0001-slug.md`, `0002-slug.md`, etc.
 
-Create the `docs/adr/` directory lazily — only when the first ADR is needed.
+Follow `../engineering-workflow/references/scratch-organization.md` before creating
+Markdown. Create the fallback `docs/adr/` directory lazily—only when the first ADR is
+needed. Never mutate a signed or read-only decision archive; escalate instead.
 
 ## Template
 
@@ -24,7 +28,8 @@ Only include these when they add genuine value. Most ADRs won't need them.
 
 ## Numbering
 
-Scan `docs/adr/` for the highest existing number and increment by one.
+Scan the resolved repository-declared ADR authority for its highest existing number
+and follow its naming convention. Only scan `docs/adr/` when using the fallback path.
 
 ## When to offer an ADR
 

@@ -31,14 +31,16 @@ Use this phase when the desired change is unclear, broad, high-risk, or domain-l
 
 ## Domain Docs
 
-Default artifacts:
+Resolve the repository-declared glossary and repository-declared ADR authority first,
+including protected or read-only paths. When no convention exists, use these fallback
+artifacts:
 
 ```txt
 CONTEXT.md
 docs/adr/0001-short-title.md
 ```
 
-`CONTEXT.md` should contain:
+A fallback `CONTEXT.md` should contain:
 
 - Glossary of project terms.
 - Important domain concepts.

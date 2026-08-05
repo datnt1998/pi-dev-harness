@@ -13,6 +13,8 @@ test("new-project setup covers ecosystem, monorepo, review, scratch, and release
     "Working directory",
     "configured upstream/default branch",
     ".scratch/",
+    "Scratch layout/registry convention",
+    "Durable Markdown authorities",
     "Version source(s)",
     "Exact production/deploy trigger",
     "Rollback and smoke procedure",
@@ -46,7 +48,7 @@ test("repo-hygiene enforces lifecycle classification, drift sweep, and safe dele
   assert.match(skill, /scoped authority|correct authority/i);
   assert.match(skill, /create-time gate/i);
   assert.match(skill, /keep\b.*reconcile.*delete|keep\s*\/\s*reconcile\s*\/\s*delete/i);
-  assert.match(skill, /not git-recoverable/i);
+  assert.match(skill, /not\s+git-recoverable/i);
   assert.match(skill, /fresh-context reviewers/i);
   assert.match(prompt, /skill:repo-hygiene/);
   assert.match(prompt, /keep .* reconcile .* delete/i);

@@ -40,17 +40,17 @@ Keep product identity, test/build commands, release source, deploy trigger, them
 
 ## Install
 
-This package is distributed by git tag; there is no npm publish. The current release tag is `v0.9.0`.
+This package is distributed by git tag; there is no npm publish. The current release tag is `v0.10.0`.
 
 ```bash
 # User-scope local development: all projects use this checkout.
 pi install /absolute/path/to/pi-dev-harness
 
 # Pinned git tag, user scope (reproducible):
-pi install git:github.com/datnt1998/pi-dev-harness@v0.9.0
+pi install git:github.com/datnt1998/pi-dev-harness@v0.10.0
 
 # Team/project scope:
-pi install -l git:github.com/datnt1998/pi-dev-harness@v0.9.0
+pi install -l git:github.com/datnt1998/pi-dev-harness@v0.10.0
 ```
 
 Then `/reload`.
@@ -61,7 +61,7 @@ Local-path installs follow the checkout immediately after `/reload`; pin that ch
 
 1. Run `/harness-engineering-setup`.
 2. Resolve `templates/PROJECT_SETUP.md`; copy verified project facts into `AGENTS.md` and adapt `templates/APPEND_SYSTEM.md` only when needed.
-3. Record repository/workspace roots, ecosystem-native validation commands, review base, `.scratch/` ignore policy, and release/deploy authority. Unknown production facts stay disabled—not guessed.
+3. Record repository/workspace roots, ecosystem-native validation commands, review base, `.scratch/` ignore and layout policy (one registered effort directory, no root-level/session/round notes), durable Markdown authorities, and release/deploy authority. Unknown production facts stay disabled—not guessed.
 4. `/reload`, then run `npm run smoke:installed` in this checkout.
 5. Exercise one small native change through inspect → validate → review → checkpoint before autonomous batches.
 

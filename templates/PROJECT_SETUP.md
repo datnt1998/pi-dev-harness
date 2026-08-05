@@ -34,6 +34,8 @@ template:
 - Issue tracker; otherwise local ticket path:
 - Spec/ADR/domain-doc paths:
 - Scratch artifact path and ignore policy (normally `.scratch/` in `.gitignore`):
+- Scratch layout/registry convention (default: one `.scratch/<effort>/`, required `index.md` or Wayfinder `map.md`, no root-level files):
+- Durable Markdown authorities and protected/read-only doc paths:
 
 ## Validation
 

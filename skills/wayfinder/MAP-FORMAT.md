@@ -22,6 +22,10 @@ Layout for one effort:
 ---
 effort: multi-device-sync
 status: charting   # charting | working | complete
+owner: product-planning-owner
+created: 2026-07-12
+delete-when: reviewed spec is accepted and durable decisions are promoted
+authority: none
 ---
 
 # Map: Multi-device sync
@@ -81,5 +85,7 @@ Which sync backend fits a single-user local-first app: hosted DB, object storage
   ```
 
   then verify blockers by reading the listed files' frontmatter.
-- **Assets**: research notes and prototype pointers go under `assets/` (or a linked throwaway branch), linked from the ticket's Answer — never pasted into the map.
+- **Assets**: research notes and prototype pointers go under `assets/` (or a linked throwaway branch), linked from the ticket's Answer — never pasted into the map. Use one subject-based asset per retained evidence set; do not create per-agent or per-review-round report files.
 - **Answers are immutable history**: to revisit a closed decision, open a *new* ticket that supersedes it and link both ways; don't rewrite the old Answer.
+- **No orphans**: every Markdown file under the effort is linked from the map, a ticket, or `handoff.md`; otherwise propose its deletion before handoff and apply only after explicit approval.
+- **Close-out**: when the destination has been promoted to its durable authority, delete the completed effort directory after approval; scratch never becomes the archive.

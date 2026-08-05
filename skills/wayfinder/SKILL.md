@@ -19,7 +19,7 @@ Every ticket has a **name** — its title. In everything the human reads, refer 
 
 ## The Map
 
-The map lives at `.scratch/<effort>/map.md`; tickets are files under `.scratch/<effort>/tickets/`. Exact formats: `MAP-FORMAT.md`.
+The map lives at `.scratch/<effort>/map.md`; tickets are files under `.scratch/<effort>/tickets/`. The map is the effort registry required by `../engineering-workflow/references/scratch-organization.md`; do not create sibling session/round directories for the same destination. Exact formats: `MAP-FORMAT.md`.
 
 The map is an **index**, not a store. It lists decisions made and points at the tickets that hold their detail; a decision lives in exactly one place — its ticket — so the map never restates it, only gists it and links. Open tickets are **not** listed in the map — they are found by scanning `tickets/` frontmatter.
 
@@ -80,10 +80,10 @@ Two modes. Human-worked tickets resolve one per session; newly charted AFK resea
 2. Choose the ticket. If the user named one, use it; otherwise take the first frontier ticket. **Claim it** (set `claimed-by`) before any work.
 3. Resolve it — zoom into related/closed tickets on demand; use the tool its type names; consult the map's Notes.
 4. Record the resolution: write the **Answer** section in the ticket, set `status: closed`, append one line to the map's Decisions so far.
-5. Add newly-surfaced tickets (create-then-wire); graduate fog the answer made specifiable, removing it from Not yet specified. If the answer reveals a ticket sits beyond the destination, rule it out of scope. If the decision invalidates other tickets, update or delete them.
+5. Add newly-surfaced tickets (create-then-wire); graduate fog the answer made specifiable, removing it from Not yet specified. If the answer reveals a ticket sits beyond the destination, rule it out of scope. If the decision invalidates other tickets, update them or propose deletion and apply it only after explicit approval.
 
 Expect other sessions to be editing the effort concurrently — re-read ticket frontmatter before claiming.
 
 ## Done — merging onto the main flow
 
-When no open tickets remain and Not yet specified is empty, the way is clear. Propose the exit named by the Destination: usually `/to-spec` (feeding Decisions so far), then `/to-tickets` → `/prepare-tickets` → `/implement-all`. If the effort turned out small, go straight to `/implement`.
+When no open tickets remain and Not yet specified is empty, the way is clear. Propose the exit named by the Destination: usually `/to-spec` (feeding Decisions so far), then `/to-tickets` → `/prepare-tickets` → `/implement-all`. If the effort turned out small, go straight to `/implement`. After the destination and durable decisions are promoted, run scratch close-out and delete the completed effort after approval; never retain it as a parallel authority/archive.

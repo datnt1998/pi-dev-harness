@@ -28,9 +28,11 @@ Keep the always-loaded layer (agent instructions, ADRs, context doc) thin and
 slow-moving — a map, not a rulebook. The codebase is the single source of truth;
 comments explain WHY, not WHAT.
 
-Route disposable and working artifacts into a scratch/plans/specs area that is
-gitignored and excluded from the default grep path (e.g. `.scratch/`,
-`docs/plans/`, and `docs/specs/` when specs are local-only). This physically
+Route disposable and working artifacts through the canonical path contract in
+`scratch-organization.md`. Cross-session working state uses one registered
+`.scratch/<effort>/` directory; session-only output stays in chat, a subagent runtime
+artifact directory, or that effort's `tmp/`. Do not scatter plans/reports across the
+repository or create parallel `docs/plans/` conventions ad hoc. This physically
 separates what the agent should read (authoritative) from what it should not
 (dead or in-progress). Exception: an explicitly requested cross-session plan may
 be tracked when a contract test requires it; the plan must name its deletion
@@ -38,7 +40,8 @@ trigger, and the plan plus its contract test are deleted with the final slice.
 
 ## Rules of thumb
 
-- Assign a lifecycle before you create the file; if you cannot, do not create it.
+- Assign a lifecycle, consumer, canonical path, owner, and deletion trigger before you create the file; if any is missing, do not create it.
+- Search for and update the existing effort/canonical artifact before creating another file.
 - Prefer deleting a finished artifact over hoarding it.
 - Never resurrect a finished plan/report into an authoritative path.
 - When a living spec and code diverge, identify whether implementation or intent is wrong. Reconcile the non-authoritative side, or supersede the governing authority explicitly.
