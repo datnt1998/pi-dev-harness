@@ -18,6 +18,10 @@ needed. Never mutate a signed or read-only decision archive; escalate instead.
 
 That's it. An ADR can be a single paragraph. The value is in recording *that* a decision was made and *why* — not in filling out sections.
 
+An ADR that outgrows a short paragraph is a tell that spec or design content is
+leaking in. Move the detail to the owning spec (or the wayfinder ticket's Answer
+section) and keep the ADR itself down to decision + reason + pointer.
+
 ## Optional sections
 
 Only include these when they add genuine value. Most ADRs won't need them.

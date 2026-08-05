@@ -62,14 +62,15 @@ Non-measurable acceptance criteria are flagged and escalated to `NEEDS_DECISION`
 1. Read the ticket source file the user names.
 2. Read the project setup contract and repository-native validation commands. Pass `package.json` scripts as `repoScripts` when present; for other ecosystems preserve explicit ticket commands and do not invent an auto-fix.
 3. Resolve this skill's directory, then run `node --experimental-strip-types <skill-dir>/../../lib/gate-run.ts <tickets.md>`. It prints statuses, order, cycles, warnings, and fingerprint; non-zero means decisions/blockers remain. Do not create an ad-hoc classifier.
-4. Route output through `../engineering-workflow/references/scratch-organization.md`.
+4. Depth-check every structurally `READY` ticket against the shallow-ticket tells owned by `../engineering-workflow/references/spec-and-tickets.md` (cross-reference; the list is not restated here). A ticket exhibiting a tell is reported as `NEEDS_DECISION` with the specific tell named, and enters the deduplicated question batch alongside other `NEEDS_DECISION` items. The deterministic gate in step 3 stays authoritative for structure; this step is prose-level judgment and never edits `lib/` or invents an ad-hoc classifier.
+5. Route output through `../engineering-workflow/references/scratch-organization.md`.
    Reuse the ticket source's registered `.scratch/<effort>/` when it is inside one;
    otherwise create/reuse `.scratch/<batch>/` with the required `index.md`. Link both
    artifacts from that registry:
    - `execution-manifest.md` — fingerprint header comment, ordered runnable tickets with normalized fields and recorded auto-fixes.
    - `readiness-report.md` — per-ticket status, issues, and auto-fixes; a summary count; and the list of tickets needing decisions or blocked.
-5. Deduplicate all `NEEDS_DECISION` questions into one numbered batch with affected tickets and recommended safe defaults. Report structural blockers without inventing fixes.
-6. A persisted manifest is optional for auditability; `/implement-all` always re-gates live source and proceeds with independent runnable tickets.
+6. Deduplicate all `NEEDS_DECISION` questions into one numbered batch with affected tickets and recommended safe defaults. Report structural blockers without inventing fixes.
+7. A persisted manifest is optional for auditability; `/implement-all` always re-gates live source and proceeds with independent runnable tickets.
 
 ## Manifest Header
 

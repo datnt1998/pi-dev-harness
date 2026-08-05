@@ -108,6 +108,17 @@ A **wide refactor** is one mechanical change whose blast radius spans many calle
 
 When migration batches cannot stay green independently, use an integration branch and make them all block one final integrate-and-verify ticket. Do not force a wide refactor into fake tracer bullets.
 
+### Shallow-ticket tells
+
+A ticket that reads as structurally complete but carries no real depth shows one of these tells:
+
+- Acceptance criteria that restate the title or goal instead of naming a testable observable outcome.
+- Scope naming no concrete seam — no re-grepped file/symbol anchor per this file's Claim Verification rules above.
+- Validation commands generic to the repository ("run the test suite") rather than specific to the change.
+- A run of tickets with near-uniform size and phrasing — a mass-generation tell.
+
+A tell appearing mid-generation means the slice is too large or grounding is missing: stop, narrow to one coherent slice, or re-ground before writing more tickets. One ticket-generation session covers one spec.
+
 ## Issue Tracker
 
 If `docs/agents/issue-tracker.md` exists, follow it. Otherwise use local Markdown under one registered `.scratch/<effort>/` directory. During setup, add `.scratch/` to the project ignore policy unless the team intentionally versions workflow artifacts. A tracked scratch path requires an explicit repository exception; do not infer one from existing drift.

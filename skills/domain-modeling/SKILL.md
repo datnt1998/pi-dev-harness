@@ -73,3 +73,9 @@ Only offer to create an ADR when all three are true:
 3. **The result of a real trade-off** — there were genuine alternatives and you picked one for specific reasons
 
 If any of the three is missing, skip the ADR. Use the format in `ADR-FORMAT.md` (same directory).
+
+Write the ADR at the moment its decision locks, not later. One decision, one ADR,
+with the three-part test applied fresh each time. Writing several ADRs in a row at
+session end is a tell: decisions were not recorded when made. Stop and record each
+against its own decision context — mirror the glossary rule above ("capture as they
+happen," not batched).

@@ -86,4 +86,8 @@ Expect other sessions to be editing the effort concurrently — re-read ticket f
 
 ## Done — merging onto the main flow
 
-When no open tickets remain and Not yet specified is empty, the way is clear. Propose the exit named by the Destination: usually `/to-spec` (feeding Decisions so far), then `/to-tickets` → `/prepare-tickets` → `/implement-all`. If the effort turned out small, go straight to `/implement`. After the destination and durable decisions are promoted, run scratch close-out and delete the completed effort after approval; never retain it as a parallel authority/archive.
+When no open tickets remain and Not yet specified is empty, the way is clear. The exit is never one aggregate `/to-spec` over all of Decisions so far — that funnels every decision into a single session's context budget.
+
+The closing session groups Decisions so far into coherent delivery slices — by bounded context, subsystem, or dependency cluster — and orders the slices by dependency. It produces the spec (`/to-spec` → `/to-tickets`) for the **first** slice only. Each subsequent slice gets its own `/to-spec` → `/to-tickets` → `/prepare-tickets` → `/implement-all` run in a **fresh session**, with its own context budget, fed by that slice's decisions plus the map's Destination. One ticket-generation session covers one spec — watch for the shallow-ticket tells owned by `../engineering-workflow/references/spec-and-tickets.md` (cross-reference, not restated here); a tell mid-generation signals the slice outgrew the session.
+
+If the effort turned out small enough that its decisions fit one slice, skip the slicing and go straight to `/implement`. After the destination and durable decisions are promoted, run scratch close-out and delete the completed effort after approval; never retain it as a parallel authority/archive.
