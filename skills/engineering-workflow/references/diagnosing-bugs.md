@@ -70,6 +70,10 @@ Each hypothesis must be **falsifiable**: "If <X> is the cause, then <changing Y>
 
 **Show the ranked list to the user before testing.** They often re-rank instantly ("we just deployed a change to #3") or have already ruled some out. Don't block on it — proceed with your ranking if the user is AFK. Use the `oracle` subagent when hypotheses genuinely compete.
 
+Test each hypothesis systematically and record the elimination path — what was ruled out and by which evidence. Do not lock onto the first plausible explanation before the others are tested.
+
+When the bug has a "since when" dimension, construct a correlated timeline across sources — logs, commits, deploys, config/dependency changes — before committing to a hypothesis.
+
 ## Phase 4 — Instrument
 
 Each probe maps to a specific prediction from Phase 3. **Change one variable at a time.**
@@ -83,6 +87,10 @@ Each probe maps to a specific prediction from Phase 3. **Change one variable at 
 **Perf branch:** for performance regressions, logs are usually wrong. Establish a baseline measurement (timing harness, profiler, query plan), then bisect. Measure first, fix second.
 
 ## Phase 5 — Fix + regression test
+
+Type each hypothesis and the root cause using Claim Discipline (`/skill:reasoning-discipline`) — OBSERVED, DERIVED, PRIOR, or ASSUMED — so "probably" never wears OBSERVED grammar.
+
+The root cause must carry an evidence chain back to Phase 4's probes; "probably" is not a conclusion — either show the proof through the feedback loop or state the residual uncertainty explicitly.
 
 Write the regression test **before the fix** — but only at a **correct seam**: one where the test exercises the real bug pattern as it occurs at the call site. If the only seam is too shallow (single-caller test when the bug needs multiple callers), a regression test there gives false confidence.
 
@@ -99,6 +107,7 @@ Required before declaring done:
 - [ ] All `[DEBUG-...]` instrumentation removed (grep the prefix)
 - [ ] Throwaway harnesses deleted (or clearly marked)
 - [ ] The winning hypothesis stated in the commit/PR message — so the next debugger learns
+- [ ] Recurrence prevention named: the monitoring gap, missing test seam, or design flaw that let the bug survive
 
 **Then ask: what would have prevented this bug?** If the answer is architectural (no good test seam, tangled callers, hidden coupling), recommend a design pass with `/skill:codebase-design` — after the fix is in, not before.
 

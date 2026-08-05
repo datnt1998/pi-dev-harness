@@ -44,6 +44,8 @@ Before implementation, state the smallest useful contract:
 
 ## Checks
 
+Use `diff-aware-testing.md` to pick which tests a changed file needs; run focused checks often and the full suite near the end when feasible.
+
 Prefer, in order:
 
 - single test file

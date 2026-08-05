@@ -45,6 +45,16 @@ Rules:
 - Keep acceptance criteria testable.
 - Include affected modules/files when known.
 - If the spec is based on conversation only, say so.
+- Before locking a direction not already resolved in `grill-with-docs.md`, apply its assumption/alternatives gates (challenge an assumption, surface genuine alternatives, name the simplest viable option, state second-order effects, route architecture-shaping decisions to `/skill:domain-modeling`).
+
+## Claim Verification
+
+Apply to every spec, plan, and ticket written here, whether parent- or planner-authored:
+
+- **Cite `file:line`, or tag `[UNVERIFIED]`** — every load-bearing symbol reference carries a `file:line` citation; tag an unfindable claim `[UNVERIFIED]` instead of asserting it.
+- **Trace, don't assume** — behavioral claims ("X calls Y", "middleware runs before handler") require tracing the actual code path, not just a line citation.
+
+`delegation-policy.md`'s planner verification discipline owns the companion rules for re-verifying scout output and checking state lifetime before a claim enters this artifact.
 
 ## To Tickets
 

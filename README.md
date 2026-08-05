@@ -15,9 +15,9 @@ Reusable Pi engineering harness: portable workflow skills/prompts plus safe auto
   - **Mid-run (long single runs):** our own `ctx.compact()` aborts the active run, so it can only fire at idle. To compact a long single run *without interrupting it*, the extension keeps Pi's native between-turns compaction (`compaction.reserveTokens`) aligned with your trigger — writing it to the **project** `.pi/settings.json` only (never global, so a per-model reserve can't leak). Non-interrupting; applies from the next session/reload (Pi has no runtime setter for `reserveTokens`). Toggle with `/autocompact native on|off`; `/autocompact status` shows the resulting mid-run point.
   - **If you previously ran a global `~/.pi/agent/extensions/autocompact/` copy, remove it after installing the package so the `/autocompact` command is not registered twice.**
 
-### Skills (17)
+### Skills (18)
 
-`pi-harness`, `engineering-workflow`, `codebase-design`, `domain-modeling`, `git-rules`, `repo-hygiene`, `release-versioning`, `release-check`, `ticket-readiness`, `batch-implementation`, `prototype`, `wayfinder`, `memory-management`, `react-best-practices`, `react-doctor`, `make-interfaces-feel-better`, `tldraw-diagrams`.
+`pi-harness`, `engineering-workflow`, `codebase-design`, `domain-modeling`, `git-rules`, `repo-hygiene`, `release-versioning`, `release-check`, `ticket-readiness`, `batch-implementation`, `prototype`, `wayfinder`, `memory-management`, `react-best-practices`, `react-doctor`, `make-interfaces-feel-better`, `tldraw-diagrams`, `reasoning-discipline`.
 
 ### Prompts (29)
 

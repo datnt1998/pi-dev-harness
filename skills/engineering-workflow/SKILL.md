@@ -43,15 +43,16 @@ When the user asks broadly, route specific on-ramps before the generic delivery 
 3. Design uncertainty that needs a runnable answer (state/logic or UI) → `/skill:prototype`.
 4. Interface or seam design → `/skill:codebase-design`; an active scan for deepening opportunities → `/improve-architecture`.
 5. Fuzzy/overloaded domain terms or an ADR-worthy decision → `/skill:domain-modeling`.
-6. Pi resources, packages, skills, prompts, extensions, themes, or harness architecture → `/skill:pi-harness` first or alongside this workflow.
-7. Repository-doc lifecycle or drift cleanup → `/skill:repo-hygiene`.
-8. Canvas diagram request → `/skill:tldraw-diagrams`.
-9. Code changed or a PR/diff needs checking → `code-review`.
-10. Session needs transfer → `handoff`.
-11. Ambiguous goal or unresolved decisions → `grill-with-docs`.
-12. Clear conversation but no written target → `to-spec`.
-13. Spec/plan exists and needs execution slices → `to-tickets`.
-14. Approved ticket/spec exists → `implement`; for weakly tested brownfield code, also load `references/legacy-refactor.md` and pin current behavior first.
+6. High-stakes or contested reasoning, diagnosis, or output bound by a mechanically checkable constraint → `/skill:reasoning-discipline`.
+7. Pi resources, packages, skills, prompts, extensions, themes, or harness architecture → `/skill:pi-harness` first or alongside this workflow.
+8. Repository-doc lifecycle or drift cleanup → `/skill:repo-hygiene`.
+9. Canvas diagram request → `/skill:tldraw-diagrams`.
+10. Code changed or a PR/diff needs checking → `code-review`.
+11. Session needs transfer → `handoff`.
+12. Ambiguous goal or unresolved decisions → `grill-with-docs`.
+13. Clear conversation but no written target → `to-spec`.
+14. Spec/plan exists and needs execution slices → `to-tickets`.
+15. Approved ticket/spec exists → `implement`; for weakly tested brownfield code, also load `references/legacy-refactor.md` and pin current behavior first.
 
 ## Pi Harness Boundary
 
@@ -78,6 +79,7 @@ Vocabulary and detour skills that run underneath or beside the phases:
 - `/skill:repo-hygiene` — keeps non-code artifacts honest: create-time lifecycle gate plus a subagent-assisted drift sweep; runs at `handoff` and whenever docs accumulate.
 - `/skill:tldraw-diagrams` — turns architecture/workflow discussion or an ASCII sketch into a real tldraw canvas (installs tldraw offline if missing); useful during `to-spec` and `handoff`.
 - `/skill:react-best-practices` — React perf/architecture rules (waterfalls, bundle, re-renders, composition) for `implement` and `code-review` on frontend code; pairs with `/skill:make-interfaces-feel-better` via the `/fe-polish` prompt.
+- `/skill:reasoning-discipline` — the reasoning protocol (Floor, five moves, Claim Discipline, Constraint Loop) for careful reasoning, contested claims, or mechanically checkable output constraints during any phase.
 
 ## Pi Subagent Orchestration Contract
 
@@ -180,6 +182,7 @@ Load only when needed:
 - `references/delegation-policy.md` — normative subagent routing, launch, control, fidelity, and claim-verification contract.
 - `references/legacy-refactor.md` — brownfield safety: characterization/golden tests to pin current behavior before refactoring untested code.
 - `references/research.md` — source-backed research flow using `pi-web-access` and `researcher`.
+- `references/diff-aware-testing.md` — mapping strategies, escalation, and the selection report for choosing which tests a diff needs.
 - `references/artifact-lifecycle.md` — lifecycle classes, authority boundaries, and anti-drift rules.
 - `references/scratch-organization.md` — create-time gate, canonical Markdown destinations, one-effort scratch layout, naming, orphan detection, and close-out.
 - `references/response-shape.md` — the single normative source for final user-facing prose shape; governs only the prose wrapper, never tool payloads, evidence records, commits, tickets/specs/ADRs, handoff structure, subagent briefs, or exhaustive findings.

@@ -19,6 +19,34 @@ and `.scratch/` layout lives in `../engineering-workflow/references/scratch-orga
 Read both before creating or sweeping repository artifacts; this skill owns the
 *active enforcement and periodic sweep*.
 
+## Ownership Rule
+
+Code owns WHAT and HOW; docs own only WHY (decisions, rejected alternatives, trade-offs, domain constraints code cannot express) and WHERE (navigation to entry points, boundaries, executable owners). Never re-describe implementation behavior in prose — point to the owning source, test, schema, or manifest. No hand-maintained counts, LOC tables, file trees, or inventories.
+
+## Evidence Layers
+
+Keep these layers distinct and labeled:
+
+- **Intent** — the durable outcome and principles.
+- **Current decisions** — accepted contracts, not release proof.
+- **Current evidence** — source, tests, generated artifacts, live state.
+- **Stateful records** — plans, audits, snapshots; they age and must say so.
+
+When intent and evidence differ, state both and name the gap. Never rewrite intent to match incomplete code.
+
+## Accuracy Protocol
+
+Before keeping or adding a claim, verify it:
+
+- file/symbol references by repository search;
+- CLI flags from command registration or current help;
+- config fields from the parser/schema;
+- examples with the narrowest practical command;
+- internal links and anchors;
+- generated docs through their generator.
+
+If evidence is unavailable, narrow the claim or mark the uncertainty — never fill gaps with plausible detail.
+
 ## Two enforcement moments
 
 ### 1. Create-time gate (proactive — every agent, every doc)

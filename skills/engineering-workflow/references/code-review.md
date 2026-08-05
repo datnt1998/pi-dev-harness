@@ -71,6 +71,41 @@ Find:
 - scope creep
 - untested acceptance criteria
 
+## Review Posture
+
+Assume the diff may be AI-authored. Polished structure, confident comments, and passing happy-path tests are not evidence of correctness — verify against the diff, surrounding code, project rules, and runnable checks. No rubber-stamping or praise padding. Be hostile to defects and scope creep while keeping the report professional and evidence-based.
+
+## AI-Assisted-Code Risk Lens
+
+Both axes apply this lens:
+
+- generic helpers or abstractions with no domain anchor;
+- parallel reimplementation of existing utilities, adapters, or patterns;
+- defensive catch-and-swallow error handling;
+- `any` widening or lint suppression;
+- phantom tests that execute code without proving behavior;
+- unrelated files, broad rewrites, or drift from the stated task.
+
+## Pre-Submit Checklist
+
+Verify before returning findings:
+
+- concurrency/races and shared mutable state;
+- every thrown error handled or explicitly propagated;
+- caller assumptions match callee guarantees (nullability, shape, timing);
+- no silent breaking changes to exported interfaces or schemas;
+- external input validated at system boundaries;
+- sensitive operations check identity AND permission;
+- no unbounded loops over queries / missing indexes on filter columns;
+- no PII, secrets, or stack traces leaking outward;
+- when a plan/spec is provided, its file paths, symbols, and behavioral claims are re-verified by grep against the actual codebase.
+
+Reviewer briefs built from `delegation-policy.md` include this posture and lens for both the Standards and Spec axes.
+
+## Simplicity Pass (optional)
+
+An optional read-only reviewer angle: behavior-preserving simplification proposals only — reduce nesting via early returns, remove redundant abstraction and obvious comments, favor clarity over compactness. Never over-simplify away helpful structure. This angle is findings-only; the parent remains the sole writer applying accepted fixes.
+
 ## Stable-State Two-Axis Pattern
 
 Start review only after the writer lease is closed and the parent records one stable implementation fingerprint. Launch two **separate fresh-context, observation-only review calls** under `delegation-policy.md`, both against that exact fingerprint:
@@ -92,4 +127,4 @@ If sealed fresh reviewer calls are unavailable or their budget is exhausted, rec
 
 ## Final Report
 
-Preserve Standards and Spec findings separately. On pass, report one terse line. On findings, list only actionable items ordered by severity, evidence gaps, accepted/deferred fixes, and whether re-review is required. Map acceptance criteria through `completion-evidence.md`; never infer pass from missing evidence.
+Before submitting findings, run an ATTACK-style pass against the review's own conclusions (`/skill:reasoning-discipline`): try to kill each finding with a cheap check before reporting it. Preserve Standards and Spec findings separately. On pass, report one terse line. On findings, list only actionable items ordered by severity, evidence gaps, accepted/deferred fixes, and whether re-review is required. Map acceptance criteria through `completion-evidence.md`; never infer pass from missing evidence.
