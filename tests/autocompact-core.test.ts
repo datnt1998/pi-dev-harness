@@ -2,10 +2,15 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   applyAutoCompactCommand,
+  AUTOCOMPACT_HELP_TEXT,
+  AUTOCOMPACT_SUBCOMMANDS,
+  buildCompactionFocus,
+  buildReorientationMessage,
   computeNativeReserveTokens,
   DEFAULT_AUTOCOMPACT_SETTINGS,
   NATIVE_RESERVE_DEFAULT,
   evaluateAutoCompact,
+  extractActivityObservations,
   formatCompactionReport,
   formatIndicatorLine,
   formatIndicatorThemed,
@@ -442,4 +447,187 @@ test("safeCtxAsync resolves undefined on stale and rejects genuine errors", asyn
       }),
     /genuine failure/,
   );
+});
+
+// --- Compaction context recovery (R1-R4 pure functions) ---
+
+function userMessageEntry(text: string) {
+  return { type: "message", id: "u1", parentId: null, timestamp: "t", message: { role: "user", content: text, timestamp: 0 } };
+}
+
+function assistantToolCallEntry(name: string, args: Record<string, unknown>) {
+  return {
+    type: "message",
+    id: "a1",
+    parentId: null,
+    timestamp: "t",
+    message: {
+      role: "assistant",
+      content: [{ type: "toolCall", id: "c1", name, arguments: args }],
+      api: "messages",
+      provider: "anthropic",
+      model: "m",
+      usage: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, totalTokens: 0, cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 } },
+      stopReason: "toolUse",
+      timestamp: 0,
+    },
+  };
+}
+
+function toolResultEntry(toolName: string, text: string) {
+  return {
+    type: "message",
+    id: "r1",
+    parentId: null,
+    timestamp: "t",
+    message: {
+      role: "toolResult",
+      toolCallId: "c1",
+      toolName,
+      content: [{ type: "text", text }],
+      isError: false,
+      timestamp: 0,
+    },
+  };
+}
+
+test("extractActivityObservations detects /skill: invocations in user messages", () => {
+  const obs = extractActivityObservations([userMessageEntry("please /skill:batch-implementation this ticket")]);
+  assert.deepEqual(obs.skills, [{ name: "batch-implementation", path: undefined }]);
+  assert.deepEqual(obs.efforts, []);
+});
+
+test("extractActivityObservations detects SKILL.md paths in tool calls and results", () => {
+  const fromCall = extractActivityObservations([
+    assistantToolCallEntry("read", { path: "/repo/skills/batch-implementation/SKILL.md" }),
+  ]);
+  assert.equal(fromCall.skills.length, 1);
+  assert.equal(fromCall.skills[0].name, "batch-implementation");
+  assert.match(fromCall.skills[0].path ?? "", /skills\/batch-implementation\/SKILL\.md$/);
+
+  const fromResult = extractActivityObservations([
+    toolResultEntry("read", "contents of skills/response-quality/SKILL.md loaded"),
+  ]);
+  assert.equal(fromResult.skills.length, 1);
+  assert.equal(fromResult.skills[0].name, "response-quality");
+});
+
+test("extractActivityObservations extracts and dedups .scratch/<effort>/ directories", () => {
+  const obs = extractActivityObservations([
+    userMessageEntry("working under .scratch/compaction-recovery/tickets.md"),
+    assistantToolCallEntry("read", { path: ".scratch/compaction-recovery/plan.md" }),
+    toolResultEntry("read", "see .scratch/other-effort/notes.md too"),
+  ]);
+  assert.deepEqual(obs.efforts, ["compaction-recovery", "other-effort"].sort());
+});
+
+test("extractActivityObservations records name+path once per skill (best-known path)", () => {
+  const obs = extractActivityObservations([
+    userMessageEntry("/skill:batch-implementation start"),
+    assistantToolCallEntry("read", { path: "skills/batch-implementation/SKILL.md" }),
+  ]);
+  assert.equal(obs.skills.length, 1);
+  assert.equal(obs.skills[0].name, "batch-implementation");
+  assert.match(obs.skills[0].path ?? "", /SKILL\.md$/);
+});
+
+test("extractActivityObservations skips malformed/unknown entries silently", () => {
+  const malformed = [null, undefined, 42, "oops", {}, { type: "custom", customType: "x" }, { type: "message" }, { type: "message", message: null }, { type: "message", message: { role: "assistant", content: "not-an-array" } }];
+  assert.deepEqual(extractActivityObservations(malformed as never), { skills: [], efforts: [] });
+});
+
+test("extractActivityObservations swallows entries whose properties THROW on access", () => {
+  const throwingMessage = Object.defineProperty({ type: "message" }, "message", {
+    get() {
+      throw new Error("boom: hostile entry");
+    },
+    enumerable: true,
+  });
+  const entries = [throwingMessage, { type: "message", message: { role: "user", content: "/skill:git-rules go" } }];
+  assert.deepEqual(extractActivityObservations(entries as never), { skills: [{ name: "git-rules", path: undefined }], efforts: [] });
+});
+
+test("extractActivityObservations handles image-only toolResult content and circular tool arguments without throwing", () => {
+  const circular: Record<string, unknown> = { path: "skills/pdf/SKILL.md" };
+  circular.self = circular;
+  const entries = [
+    { type: "message", message: { role: "toolResult", content: [{ type: "image", data: "..." }] } },
+    {
+      type: "message",
+      message: { role: "assistant", content: [{ type: "toolCall", id: "c", name: "read", arguments: circular }] },
+    },
+  ];
+  // Circular arguments cannot be stringified; the entry is skipped, not thrown on.
+  assert.deepEqual(extractActivityObservations(entries as never), { skills: [], efforts: [] });
+});
+
+test("buildCompactionFocus returns user focus only when there are no observations", () => {
+  assert.equal(
+    buildCompactionFocus({ userFocus: "track open tickets", observations: { skills: [], efforts: [] }, reorientEnabled: true }),
+    "track open tickets",
+  );
+  assert.equal(buildCompactionFocus({ observations: { skills: [], efforts: [] }, reorientEnabled: true }), undefined);
+});
+
+test("buildCompactionFocus composes user focus with an auto-preserve block", () => {
+  const observations = { skills: [{ name: "batch-implementation", path: "skills/batch-implementation/SKILL.md" }], efforts: ["compaction-recovery"] };
+  const text = buildCompactionFocus({ userFocus: "track open tickets", observations, reorientEnabled: true })!;
+  assert.match(text, /track open tickets/);
+  assert.match(text, /batch-implementation \(skills\/batch-implementation\/SKILL\.md\)/);
+  assert.match(text, /\.scratch\/compaction-recovery\//);
+  assert.match(text, /task\/phase state/);
+  assert.match(text, /lease\/batch state/);
+
+  const noFocus = buildCompactionFocus({ observations, reorientEnabled: true })!;
+  assert.match(noFocus, /Active skills: batch-implementation/);
+});
+
+test("buildCompactionFocus suppresses the auto-preserve block when reorient is off", () => {
+  const observations = { skills: [{ name: "batch-implementation", path: undefined }], efforts: ["compaction-recovery"] };
+  assert.equal(
+    buildCompactionFocus({ userFocus: "keep this", observations, reorientEnabled: false }),
+    "keep this",
+  );
+  assert.equal(buildCompactionFocus({ observations, reorientEnabled: false }), undefined);
+});
+
+test("buildReorientationMessage names skills+paths and effort dirs, with a re-read instruction", () => {
+  const msg = buildReorientationMessage({
+    skills: [{ name: "batch-implementation", path: "skills/batch-implementation/SKILL.md" }, { name: "unknown-path-skill", path: undefined }],
+    efforts: ["compaction-recovery"],
+  })!;
+  assert.match(msg, /skills\/batch-implementation\/SKILL\.md/);
+  assert.match(msg, /re-read/i);
+  assert.match(msg, /do not act from summarized memory/i);
+  assert.match(msg, /\.scratch\/compaction-recovery\//);
+  assert.match(msg, /index\/tickets/);
+  assert.match(msg, /always-loaded/i);
+});
+
+test("buildReorientationMessage returns undefined when nothing was observed", () => {
+  assert.equal(buildReorientationMessage({ skills: [], efforts: [] }), undefined);
+});
+
+test("reorient setting defaults on, normalizes, and round-trips", () => {
+  assert.equal(DEFAULT_AUTOCOMPACT_SETTINGS.reorient, true);
+  assert.equal(normalizeAutoCompactSettings(undefined).reorient, true);
+  assert.equal(normalizeAutoCompactSettings({ reorient: false }).reorient, false);
+  assert.equal(normalizeAutoCompactSettings({ reorient: "nope" }).reorient, true);
+});
+
+test("reorient command parses, applies, and reflects in status/help text", () => {
+  assert.deepEqual(parseAutoCompactCommand("reorient on"), { kind: "reorient", on: true });
+  assert.deepEqual(parseAutoCompactCommand("reorient off"), { kind: "reorient", on: false });
+  assert.equal(parseAutoCompactCommand("reorient").kind, "error");
+
+  const off = applyAutoCompactCommand(DEFAULT_AUTOCOMPACT_SETTINGS, { kind: "reorient", on: false });
+  assert.equal(off.settings.reorient, false);
+  assert.equal(off.changed, true);
+  const alreadyOn = applyAutoCompactCommand(DEFAULT_AUTOCOMPACT_SETTINGS, { kind: "reorient", on: true });
+  assert.equal(alreadyOn.changed, false);
+
+  assert.ok(AUTOCOMPACT_SUBCOMMANDS.includes("reorient" as (typeof AUTOCOMPACT_SUBCOMMANDS)[number]));
+  assert.match(AUTOCOMPACT_HELP_TEXT, /reorient on\|off/);
+  const status = formatStatusText({ settings: DEFAULT_AUTOCOMPACT_SETTINGS, tokens: null, contextWindow: null });
+  assert.match(status, /[Rr]eorient/);
 });

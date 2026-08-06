@@ -13,7 +13,14 @@
  *   at safe idle boundaries (agent_settled), before Pi's built-in overflow
  *   safety net (~contextWindow - reserveTokens).
  * - `/autocompact` command: status | on | off | at <pct|tokens> | warn <pct> |
- *   focus <text|clear> | now [instructions].
+ *   focus <text|clear> | native on|off | reorient on|off | now [instructions].
+ * - Compaction context recovery: tracks skill activations (`/skill:<name>`,
+ *   `skills/<name>/SKILL.md` paths) and `.scratch/<effort>/` directories seen
+ *   on the branch. Extension-triggered compaction without explicit
+ *   instructions steers the summary to preserve them; every `session_compact`
+ *   (any source) sends one post-compaction follow-up naming what to re-read
+ *   before acting on it (no full skill/reference re-injection). Toggle with
+ *   `reorient on|off` (default on).
  *
  * Settings are layered:
  * - global default:  $PI_CODING_AGENT_DIR (or ~/.pi/agent)/autocompact.json
@@ -33,14 +40,18 @@ import { readFile, stat, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import {
+  type ActivityObservations,
   AUTOCOMPACT_HELP_TEXT,
   AUTOCOMPACT_SUBCOMMANDS,
   applyAutoCompactCommand,
   type AutoCompactSettings,
+  buildCompactionFocus,
+  buildReorientationMessage,
   type CompactTier,
   computeNativeReserveTokens,
   DEFAULT_AUTOCOMPACT_SETTINGS,
   evaluateAutoCompact,
+  extractActivityObservations,
   formatCompactionReport,
   formatIndicatorLine,
   formatIndicatorThemed,
@@ -72,7 +83,30 @@ type AutoCompactState = {
   autoFailures: number;
   /** Last native reserveTokens value we wrote this session (dedup guard). */
   nativeReserveWritten?: number;
+  /** Skills/effort dirs observed on the branch so far this session (R1/R2/R3). */
+  observations: ActivityObservations;
+  /** Number of branch entries already scanned into `observations` (incremental cursor). */
+  branchCursor: number;
 };
+
+/**
+ * Merge newly-scanned observations into the running set: skills unify by
+ * name (a later-found path fills in an earlier name-only sighting, per the
+ * "best-known path" contract), efforts dedupe by name.
+ */
+function mergeObservations(base: ActivityObservations, extra: ActivityObservations): ActivityObservations {
+  const skills = new Map(base.skills.map((s) => [s.name, { ...s }] as const));
+  for (const skill of extra.skills) {
+    const existing = skills.get(skill.name);
+    if (existing) {
+      if (!existing.path && skill.path) existing.path = skill.path;
+    } else {
+      skills.set(skill.name, { ...skill });
+    }
+  }
+  const efforts = new Set([...base.efforts, ...extra.efforts]);
+  return { skills: [...skills.values()], efforts: [...efforts].sort() };
+}
 
 function projectSettingsPath(cwd: string): string {
   return join(cwd, ".pi", "autocompact.json");
@@ -101,6 +135,8 @@ export default function autocompact(pi: ExtensionAPI) {
     compacting: false,
     autoTriggered: false,
     autoFailures: 0,
+    observations: { skills: [], efforts: [] },
+    branchCursor: 0,
   };
 
   async function loadSettings(cwd: string): Promise<void> {
@@ -192,11 +228,38 @@ export default function autocompact(pi: ExtensionAPI) {
     });
   }
 
+  /** Full rescan of the branch (session_start): cursor moves to the branch's current end. */
+  function rescanBranch(ctx: ExtensionContext): void {
+    safeCtx(() => {
+      const branch = ctx.sessionManager.getBranch();
+      state.observations = extractActivityObservations(branch);
+      state.branchCursor = branch.length;
+    });
+  }
+
+  /** Incremental scan (turn_end): only the entries appended since the last cursor. */
+  function scanBranchIncrement(ctx: ExtensionContext): void {
+    safeCtx(() => {
+      const branch = ctx.sessionManager.getBranch();
+      if (branch.length <= state.branchCursor) return;
+      const added = extractActivityObservations(branch.slice(state.branchCursor));
+      state.observations = mergeObservations(state.observations, added);
+      state.branchCursor = branch.length;
+    });
+  }
+
   function runCompaction(ctx: ExtensionContext, options: { auto: boolean; instructions?: string }): void {
     state.compacting = true;
     state.autoTriggered = options.auto;
+    const customInstructions =
+      options.instructions ??
+      buildCompactionFocus({
+        userFocus: state.settings.focus,
+        observations: state.observations,
+        reorientEnabled: state.settings.reorient !== false,
+      });
     ctx.compact({
-      customInstructions: options.instructions ?? state.settings.focus,
+      customInstructions,
       onComplete: () => {
         state.compacting = false;
         state.autoFailures = 0;
@@ -254,6 +317,7 @@ export default function autocompact(pi: ExtensionAPI) {
       state.autoTriggered = false;
       state.autoFailures = 0;
       state.nativeReserveWritten = undefined;
+      rescanBranch(ctx); // in-memory observations never persist across a restart; rescan fresh
       updateIndicator(ctx);
       await syncNativeReserve(ctx);
     });
@@ -262,6 +326,7 @@ export default function autocompact(pi: ExtensionAPI) {
   // Warnings + indicator refresh during a run (never compacts mid-run); also a
   // reliable point to align Pi's native mid-run reserve (context window known).
   pi.on("turn_end", (_event, ctx) => {
+    scanBranchIncrement(ctx);
     evaluate(ctx, false);
     // Fire-and-forget background sync. syncNativeReserve no-ops on a stale ctx;
     // the catch guarantees a residual rejection can never crash teardown.
@@ -304,6 +369,24 @@ export default function autocompact(pi: ExtensionAPI) {
       ),
     );
     updateIndicator(ctx);
+
+    // The branch-scan cursor resets after any compaction (old entries are gone
+    // from the live branch); in-memory observations survive it so a second
+    // compaction with no new activity still re-orients on what's already known.
+    safeCtx(() => {
+      state.branchCursor = ctx.sessionManager.getBranch().length;
+    });
+
+    if (state.settings.reorient === false) return;
+    const message = buildReorientationMessage(state.observations);
+    if (!message) return;
+    // sendUserMessage is on `pi`, not `ctx` — no stale-ctx guard needed for the
+    // call itself, but a failure here must never be fatal (R5).
+    try {
+      pi.sendUserMessage(message, { deliverAs: "followUp" });
+    } catch (error) {
+      safeCtx(() => ctx.ui.notify(`autocompact: re-orientation follow-up failed — ${(error as Error).message}`, "warning"));
+    }
   });
 
   pi.on("session_before_compact", (event, ctx) => {
@@ -322,7 +405,7 @@ export default function autocompact(pi: ExtensionAPI) {
   });
 
   pi.registerCommand("autocompact", {
-    description: "Auto-compact: status | on | off | at <pct|tokens e.g. 200k> | warn <pct> | focus <text|clear> | native on|off | now",
+    description: "Auto-compact: status | on | off | at <pct|tokens e.g. 200k> | warn <pct> | focus <text|clear> | native on|off | reorient on|off | now",
     getArgumentCompletions: (prefix) => {
       const items = AUTOCOMPACT_SUBCOMMANDS.filter((name) => name.startsWith(prefix.toLowerCase())).map((name) => ({
         value: name,

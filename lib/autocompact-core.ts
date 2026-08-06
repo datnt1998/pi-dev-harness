@@ -34,6 +34,14 @@ export type AutoCompactSettings = {
    * at idle). Default true. Applies from the next session/reload.
    */
   syncNativeReserve?: boolean;
+  /**
+   * Post-compaction context recovery: steer the compaction summary to preserve
+   * observed skill activations/effort directories, and send a one-shot
+   * re-orientation follow-up after `session_compact`. Default true. When off,
+   * both the auto-preserve block and the follow-up are suppressed (explicit
+   * user focus text still applies).
+   */
+  reorient?: boolean;
 };
 
 export const DEFAULT_AUTOCOMPACT_SETTINGS: AutoCompactSettings = {
@@ -41,6 +49,7 @@ export const DEFAULT_AUTOCOMPACT_SETTINGS: AutoCompactSettings = {
   triggerPercent: 90,
   warnPercent: 75,
   syncNativeReserve: true,
+  reorient: true,
 };
 
 /** Pi's default native compaction reserve; we never make native fire later than this. */
@@ -86,6 +95,167 @@ export async function safeCtxAsync<T>(work: () => Promise<T>): Promise<T | undef
     if (isStaleCtxError(error)) return undefined;
     throw error;
   }
+}
+
+// --- Compaction context recovery (R1-R4 pure functions) ---
+
+/** A skill activation observed on the branch: name plus best-known SKILL.md path. */
+export type SkillObservation = { name: string; path?: string };
+
+/** Activity extracted from a slice of session-branch entries (R1). */
+export type ActivityObservations = {
+  skills: SkillObservation[];
+  /** Deduplicated `.scratch/<effort>/` directory names. */
+  efforts: string[];
+};
+
+const SKILL_INVOKE_RE = /\/skill:([A-Za-z0-9_-]+)/g;
+// Captures the full path token ending in `skills/<name>/SKILL.md` (group 1) and
+// the skill name (group 2), so callers get the best-known path, not just the name.
+const SKILL_PATH_RE = /(\S*skills\/([^/\s"'`]+)\/SKILL\.md)/g;
+// `.scratch/<effort>/` occurrences; group 1 is the effort directory name.
+const EFFORT_DIR_RE = /\.scratch\/([^/\s"'`]+)\//g;
+
+/** Best-effort text extraction from a pi-ai TextContent[]/ImageContent[] block or a plain string. */
+function textOf(content: unknown): string {
+  if (typeof content === "string") return content;
+  if (!Array.isArray(content)) return "";
+  const parts: string[] = [];
+  for (const block of content) {
+    if (!block || typeof block !== "object") continue;
+    const b = block as Record<string, unknown>;
+    if (b.type === "text" && typeof b.text === "string") parts.push(b.text);
+  }
+  return parts.join("\n");
+}
+
+/** Stringify tool-call arguments for pattern scanning; never throws. */
+function safeStringify(value: unknown): string {
+  try {
+    return JSON.stringify(value) ?? "";
+  } catch {
+    return "";
+  }
+}
+
+function recordSkill(map: Map<string, SkillObservation>, name: string, path?: string): void {
+  const existing = map.get(name);
+  if (existing) {
+    if (!existing.path && path) existing.path = path;
+    return;
+  }
+  map.set(name, { name, path });
+}
+
+function scanTextForSkillsAndEfforts(text: string, skills: Map<string, SkillObservation>, efforts: Set<string>): void {
+  for (const match of text.matchAll(SKILL_INVOKE_RE)) recordSkill(skills, match[1]);
+  for (const match of text.matchAll(SKILL_PATH_RE)) recordSkill(skills, match[2], match[1]);
+  for (const match of text.matchAll(EFFORT_DIR_RE)) efforts.add(match[1]);
+}
+
+/**
+ * Scan a slice of session-branch entries (as returned by
+ * `ctx.sessionManager.getBranch()`) and extract skill activations
+ * (`/skill:<name>` in user messages; `skills/<name>/SKILL.md` paths in tool
+ * calls/results) and `.scratch/<effort>/` directories (R1). Callers own the
+ * incremental cursor; this function only scans the entries it is given.
+ * Malformed/unknown entry shapes are skipped silently, never thrown on.
+ */
+export function extractActivityObservations(entries: readonly unknown[]): ActivityObservations {
+  const skills = new Map<string, SkillObservation>();
+  const efforts = new Set<string>();
+
+  for (const raw of entries) {
+    try {
+      if (!raw || typeof raw !== "object") continue;
+      const entry = raw as Record<string, unknown>;
+      if (entry.type !== "message") continue;
+      const message = entry.message;
+      if (!message || typeof message !== "object") continue;
+      const m = message as Record<string, unknown>;
+
+      if (m.role === "user") {
+        scanTextForSkillsAndEfforts(textOf(m.content), skills, efforts);
+      } else if (m.role === "assistant") {
+        const content = m.content;
+        if (!Array.isArray(content)) continue;
+        for (const block of content) {
+          if (!block || typeof block !== "object") continue;
+          const b = block as Record<string, unknown>;
+          if (b.type === "toolCall") {
+            scanTextForSkillsAndEfforts(safeStringify(b.arguments), skills, efforts);
+          } else if (b.type === "text" && typeof b.text === "string") {
+            scanTextForSkillsAndEfforts(b.text, skills, efforts);
+          }
+        }
+      } else if (m.role === "toolResult") {
+        scanTextForSkillsAndEfforts(textOf(m.content), skills, efforts);
+      }
+    } catch {
+      continue; // malformed entry: skip silently, never throw
+    }
+  }
+
+  return { skills: [...skills.values()], efforts: [...efforts].sort() };
+}
+
+/**
+ * Compose the effective compaction custom instructions (R2): the user's
+ * configured focus (if any) plus an auto-generated preserve block naming
+ * active skills (names+paths), active effort directories, and a reminder to
+ * preserve current task/phase and any open lease/batch state. Returns just
+ * `userFocus` (or undefined) when reorient is disabled or nothing was
+ * observed — explicit `now <instructions>` bypasses this function entirely.
+ */
+export function buildCompactionFocus(params: {
+  userFocus?: string;
+  observations: ActivityObservations;
+  reorientEnabled: boolean;
+}): string | undefined {
+  const { userFocus, observations, reorientEnabled } = params;
+  const trimmedFocus = userFocus?.trim();
+  const focusOrUndefined = trimmedFocus && trimmedFocus.length > 0 ? trimmedFocus : undefined;
+  const hasObservations = observations.skills.length > 0 || observations.efforts.length > 0;
+
+  if (!reorientEnabled || !hasObservations) return focusOrUndefined;
+
+  const lines: string[] = [];
+  if (focusOrUndefined) lines.push(focusOrUndefined);
+  lines.push("Preserve in the summary:");
+  if (observations.skills.length > 0) {
+    const skillList = observations.skills.map((s) => (s.path ? `${s.name} (${s.path})` : s.name)).join(", ");
+    lines.push(`- Active skills: ${skillList}`);
+  }
+  if (observations.efforts.length > 0) {
+    lines.push(`- Active effort directories: ${observations.efforts.map((e) => `.scratch/${e}/`).join(", ")}`);
+  }
+  lines.push("- Current task/phase state and any open lease/batch state");
+  return lines.join("\n");
+}
+
+/**
+ * Build the one-shot post-compaction re-orientation follow-up (R3): names
+ * previously active skills (with paths where known) and effort directories,
+ * instructing a re-read before acting on them, plus a reminder that
+ * always-loaded project rules remain in force. Returns undefined when
+ * nothing was observed (no follow-up is sent).
+ */
+export function buildReorientationMessage(observations: ActivityObservations): string | undefined {
+  if (observations.skills.length === 0 && observations.efforts.length === 0) return undefined;
+
+  const lines: string[] = ["Context was just compacted. Before continuing:"];
+  for (const skill of observations.skills) {
+    lines.push(
+      skill.path
+        ? `- Re-read ${skill.path} before acting under the "${skill.name}" skill — do not act from summarized memory.`
+        : `- Re-read the "${skill.name}" skill's SKILL.md before acting under it — do not act from summarized memory.`,
+    );
+  }
+  for (const effort of observations.efforts) {
+    lines.push(`- Re-read .scratch/${effort}/'s index/tickets before continuing that effort.`);
+  }
+  lines.push("Always-loaded project rules (AGENTS.md / APPEND_SYSTEM) remain in force.");
+  return lines.join("\n");
 }
 
 export const TRIGGER_MIN = 50;
@@ -135,6 +305,7 @@ export function normalizeAutoCompactSettings(raw: unknown): AutoCompactSettings 
     triggerPercent,
     warnPercent,
     syncNativeReserve: source.syncNativeReserve !== false,
+    reorient: source.reorient !== false,
   };
   if (typeof source.triggerTokens === "number" && Number.isFinite(source.triggerTokens) && source.triggerTokens > 0) {
     settings.triggerTokens = clampInt(source.triggerTokens, TRIGGER_TOKENS_MIN, TRIGGER_TOKENS_MAX);
@@ -414,11 +585,12 @@ export type AutoCompactCommand =
   | { kind: "warn"; percent: number }
   | { kind: "focus"; text?: string }
   | { kind: "native"; on: boolean }
+  | { kind: "reorient"; on: boolean }
   | { kind: "now"; instructions?: string }
   | { kind: "help" }
   | { kind: "error"; message: string };
 
-export const AUTOCOMPACT_SUBCOMMANDS = ["status", "on", "off", "at", "warn", "focus", "native", "now", "help"] as const;
+export const AUTOCOMPACT_SUBCOMMANDS = ["status", "on", "off", "at", "warn", "focus", "native", "reorient", "now", "help"] as const;
 
 const AT_USAGE = `Usage: /autocompact at <${TRIGGER_MIN}-${TRIGGER_MAX}[%]> or <tokens, e.g. 200k | 250000 | 1m>`;
 
@@ -471,6 +643,12 @@ export function parseAutoCompactCommand(args: string): AutoCompactCommand {
       if (v === "on") return { kind: "native", on: true };
       if (v === "off") return { kind: "native", on: false };
       return { kind: "error", message: "Usage: /autocompact native on|off — align Pi's non-interrupting mid-run compaction" };
+    }
+    case "reorient": {
+      const v = (restParts[0] ?? "").toLowerCase();
+      if (v === "on") return { kind: "reorient", on: true };
+      if (v === "off") return { kind: "reorient", on: false };
+      return { kind: "error", message: "Usage: /autocompact reorient on|off — post-compaction context recovery" };
     }
     case "now":
       return { kind: "now", instructions: rest.length > 0 ? rest : undefined };
@@ -564,6 +742,16 @@ export function applyAutoCompactCommand(settings: AutoCompactSettings, cmd: Auto
           : "Mid-run sync OFF — Pi's native compaction keeps its own reserve",
       };
     }
+    case "reorient": {
+      const on = cmd.on;
+      return {
+        settings: { ...settings, reorient: on },
+        changed: (settings.reorient !== false) !== on,
+        reply: on
+          ? "Re-orientation ON — steered summaries + post-compaction re-read follow-up"
+          : "Re-orientation OFF — summaries and post-compaction follow-up no longer auto-preserve skill/effort context",
+      };
+    }
     default:
       return { settings, changed: false };
   }
@@ -608,6 +796,7 @@ export function formatStatusText(params: {
     lines.push("Mid-run (Pi native): sync OFF (long runs rely on Pi's default reserve)");
   }
   lines.push(`Focus: ${settings.focus ?? "none"}`);
+  lines.push(`Reorient: ${settings.reorient !== false ? "ON" : "OFF"} (post-compaction context recovery)`);
   return lines.join("\n");
 }
 
@@ -619,5 +808,6 @@ export const AUTOCOMPACT_HELP_TEXT = [
   `/autocompact warn <${WARN_MIN}-${WARN_MAX}> — set warning percent`,
   "/autocompact focus <text>|clear — set/clear summary focus instructions",
   "/autocompact native on|off — align Pi's non-interrupting mid-run compaction with your trigger",
+  "/autocompact reorient on|off — post-compaction context recovery (steered summary + re-read follow-up)",
   "/autocompact now [instructions] — compact immediately",
 ].join("\n");

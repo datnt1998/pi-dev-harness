@@ -13,15 +13,30 @@
  * with a fake `pi` + a fake ctx whose getters throw the exact stale-ctx error.
  */
 import assert from "node:assert/strict";
+import { mkdtempSync, mkdirSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import test from "node:test";
 import autocompact from "../extensions/autocompact.ts";
 import { STALE_CTX_MARKER } from "../lib/autocompact-core.ts";
+
+// Any command that changes settings persists to `<cwd>/.pi/` (project scope)
+// or the real global `~/.pi/agent/autocompact.json` when no project `.pi/`
+// exists. Tests must never touch the latter: give every live ctx its OWN
+// private scratch cwd with a `.pi/` directory so persistence stays sandboxed
+// and no settings leak between tests.
+function freshScratchCwd(): string {
+  const dir = mkdtempSync(join(tmpdir(), "autocompact-extension-test-"));
+  mkdirSync(join(dir, ".pi"), { recursive: true });
+  return dir;
+}
 
 type Handler = (event: Record<string, unknown>, ctx: unknown) => unknown;
 
 function makeFakePi() {
   const handlers: Record<string, Handler[]> = {};
   const commands: Record<string, { handler: (args: string, ctx: unknown) => Promise<unknown> }> = {};
+  const sentMessages: Array<{ text: string; opts?: unknown }> = [];
   const pi = {
     on(event: string, handler: Handler) {
       (handlers[event] ??= []).push(handler);
@@ -29,8 +44,11 @@ function makeFakePi() {
     registerCommand(name: string, def: { handler: (args: string, ctx: unknown) => Promise<unknown> }) {
       commands[name] = def;
     },
+    sendUserMessage(text: string, opts?: unknown) {
+      sentMessages.push({ text, opts });
+    },
   };
-  return { pi, handlers, commands };
+  return { pi, handlers, commands, sentMessages };
 }
 
 /** A ctx whose every getter/method throws the SDK's exact stale-ctx error. */
@@ -59,6 +77,57 @@ function staleCtx() {
     hasPendingMessages: throwStale,
     compact: throwStale,
     waitForIdle: throwStale,
+    sessionManager: {
+      getBranch: throwStale,
+    },
+  };
+}
+
+/** A live ctx (non-stale) whose branch grows as the caller mutates `entries`. */
+function liveCtx(entries: unknown[], overrides: Record<string, unknown> = {}) {
+  return {
+    ui: {
+      notify: () => {},
+      setStatus: () => {},
+      setWidget: () => {},
+      theme: { fg: (_role: string, text: string) => text },
+    },
+    mode: "tui",
+    hasUI: true,
+    cwd: freshScratchCwd(),
+    model: { contextWindow: 200_000 },
+    getContextUsage: () => ({ tokens: null, contextWindow: null }),
+    isIdle: () => true,
+    hasPendingMessages: () => false,
+    compact: () => {},
+    waitForIdle: async () => {},
+    sessionManager: {
+      getBranch: () => entries,
+    },
+    ...overrides,
+  };
+}
+
+function skillMessageEntry(text: string) {
+  return { type: "message", id: "u", parentId: null, timestamp: "t", message: { role: "user", content: text, timestamp: 0 } };
+}
+
+function effortToolCallEntry(path: string) {
+  return {
+    type: "message",
+    id: "a",
+    parentId: null,
+    timestamp: "t",
+    message: {
+      role: "assistant",
+      content: [{ type: "toolCall", id: "c", name: "read", arguments: { path } }],
+      api: "messages",
+      provider: "anthropic",
+      model: "m",
+      usage: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, totalTokens: 0, cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 } },
+      stopReason: "toolUse",
+      timestamp: 0,
+    },
   };
 }
 
@@ -229,6 +298,7 @@ test("turn_end still surfaces a NON-stale ctx error (no silent swallowing)", () 
   autocompact(pi as never);
 
   const ctx = {
+    sessionManager: { getBranch: () => [] },
     getContextUsage(): never {
       throw new Error("boom: genuine getContextUsage failure");
     },
@@ -240,4 +310,190 @@ test("turn_end still surfaces a NON-stale ctx error (no silent swallowing)", () 
     /genuine getContextUsage failure/,
     "a non-stale error must propagate, not be swallowed by the stale-ctx guard",
   );
+});
+
+// --- Compaction context recovery (R2/R3/R5 wiring) ---
+
+test("session_start scans the branch, turn_end scans incrementally, session_compact sends exactly one re-orientation follow-up", async () => {
+  const { pi, handlers, sentMessages } = makeFakePi();
+  autocompact(pi as never);
+
+  const entries: unknown[] = [];
+  const ctx = liveCtx(entries);
+
+  for (const handler of handlers.session_start) await handler({}, ctx);
+
+  entries.push(skillMessageEntry("/skill:batch-implementation continue the work"));
+  entries.push(effortToolCallEntry(".scratch/compaction-recovery/tickets.md"));
+  for (const handler of handlers.turn_end) handler({}, ctx);
+
+  for (const handler of handlers.session_compact) {
+    handler({ reason: "manual", compactionEntry: { tokensBefore: 5000 } }, ctx);
+  }
+
+  assert.equal(sentMessages.length, 1, "exactly one follow-up sent for the compaction event");
+  assert.equal(sentMessages[0].opts && (sentMessages[0].opts as { deliverAs?: string }).deliverAs, "followUp");
+  assert.match(sentMessages[0].text, /batch-implementation/);
+  assert.match(sentMessages[0].text, /\.scratch\/compaction-recovery\//);
+});
+
+test("no follow-up is sent when no observations were made", async () => {
+  const { pi, handlers, sentMessages } = makeFakePi();
+  autocompact(pi as never);
+
+  const entries: unknown[] = [];
+  const ctx = liveCtx(entries);
+  for (const handler of handlers.session_start) await handler({}, ctx);
+  for (const handler of handlers.turn_end) handler({}, ctx); // nothing new to scan
+  for (const handler of handlers.session_compact) {
+    handler({ reason: "manual", compactionEntry: { tokensBefore: 5000 } }, ctx);
+  }
+
+  assert.equal(sentMessages.length, 0, "no observations means no follow-up");
+});
+
+test("no follow-up is sent when reorient is off, even with observations", async () => {
+  const { pi, handlers, commands, sentMessages } = makeFakePi();
+  autocompact(pi as never);
+
+  const entries: unknown[] = [];
+  const ctx = liveCtx(entries);
+  for (const handler of handlers.session_start) await handler({}, ctx);
+
+  await commands.autocompact.handler("reorient off", ctx);
+
+  entries.push(skillMessageEntry("/skill:batch-implementation continue"));
+  entries.push(effortToolCallEntry(".scratch/compaction-recovery/tickets.md"));
+  for (const handler of handlers.turn_end) handler({}, ctx);
+
+  for (const handler of handlers.session_compact) {
+    handler({ reason: "manual", compactionEntry: { tokensBefore: 5000 } }, ctx);
+  }
+
+  assert.equal(sentMessages.length, 0, "reorient off suppresses the follow-up");
+});
+
+test("session_compact resets the branch-scan cursor but keeps observations for the next compaction", async () => {
+  const { pi, handlers, sentMessages } = makeFakePi();
+  autocompact(pi as never);
+
+  const entries: unknown[] = [];
+  const ctx = liveCtx(entries);
+  for (const handler of handlers.session_start) await handler({}, ctx);
+
+  entries.push(skillMessageEntry("/skill:batch-implementation continue"));
+  for (const handler of handlers.turn_end) handler({}, ctx);
+  for (const handler of handlers.session_compact) {
+    handler({ reason: "manual", compactionEntry: { tokensBefore: 5000 } }, ctx);
+  }
+  assert.equal(sentMessages.length, 1);
+
+  // Second compaction with no new activity: observations survive, follow-up fires again.
+  for (const handler of handlers.turn_end) handler({}, ctx); // no new entries since cursor reset
+  for (const handler of handlers.session_compact) {
+    handler({ reason: "manual", compactionEntry: { tokensBefore: 3000 } }, ctx);
+  }
+  assert.equal(sentMessages.length, 2, "observations persist across compaction; a second compact re-sends");
+  assert.match(sentMessages[1].text, /batch-implementation/);
+});
+
+test("explicit `now <instructions>` forwards that exact text to ctx.compact — never the auto preserve block", async () => {
+  const { pi, handlers, commands } = makeFakePi();
+  autocompact(pi as never);
+
+  const entries: unknown[] = [];
+  let captured: { customInstructions?: string } | undefined;
+  const ctx = liveCtx(entries, {
+    compact: (options: { customInstructions?: string }) => {
+      captured = options;
+    },
+  });
+  for (const handler of handlers.session_start) await handler({}, ctx);
+
+  // Observations exist, so the auto block WOULD be generated on the auto path.
+  entries.push(skillMessageEntry("/skill:batch-implementation continue"));
+  for (const handler of handlers.turn_end) handler({}, ctx);
+
+  await commands.autocompact.handler("now ship the release notes", ctx);
+  assert.equal(captured?.customInstructions, "ship the release notes", "explicit instructions must win unchanged");
+});
+
+test("auto-path compaction (no explicit instructions) forwards the generated preserve block", async () => {
+  const { pi, handlers, commands } = makeFakePi();
+  autocompact(pi as never);
+
+  const entries: unknown[] = [];
+  let captured: { customInstructions?: string } | undefined;
+  const ctx = liveCtx(entries, {
+    compact: (options: { customInstructions?: string }) => {
+      captured = options;
+    },
+  });
+  for (const handler of handlers.session_start) await handler({}, ctx);
+
+  entries.push(skillMessageEntry("/skill:batch-implementation continue"));
+  entries.push(effortToolCallEntry(".scratch/compaction-recovery/tickets.md"));
+  for (const handler of handlers.turn_end) handler({}, ctx);
+
+  await commands.autocompact.handler("now", ctx);
+  assert.ok(captured, "compaction ran");
+  assert.match(captured.customInstructions ?? "", /Preserve in the summary:/);
+  assert.match(captured.customInstructions ?? "", /batch-implementation/);
+  assert.match(captured.customInstructions ?? "", /\.scratch\/compaction-recovery\//);
+});
+
+test("activity after a compaction that REPLACES the branch with a shorter one is still detected", async () => {
+  const { pi, handlers, sentMessages } = makeFakePi();
+  autocompact(pi as never);
+
+  const entries: unknown[] = [];
+  const ctx = liveCtx(entries);
+  for (const handler of handlers.session_start) await handler({}, ctx);
+
+  // Three entries scanned -> cursor = 3.
+  entries.push(skillMessageEntry("/skill:batch-implementation continue"));
+  entries.push(skillMessageEntry("plain user message"));
+  entries.push(skillMessageEntry("another plain message"));
+  for (const handler of handlers.turn_end) handler({}, ctx);
+
+  // Compaction replaces the branch with a single summary entry (length 1 < old cursor 3).
+  entries.length = 0;
+  entries.push(skillMessageEntry("summary of prior work"));
+  for (const handler of handlers.session_compact) {
+    handler({ reason: "manual", compactionEntry: { tokensBefore: 5000 } }, ctx);
+  }
+  assert.equal(sentMessages.length, 1);
+
+  // New activity lands BELOW the old cursor length; a missing cursor reset would skip it.
+  entries.push(skillMessageEntry("/skill:git-rules commit checkpoint"));
+  for (const handler of handlers.turn_end) handler({}, ctx);
+  for (const handler of handlers.session_compact) {
+    handler({ reason: "manual", compactionEntry: { tokensBefore: 3000 } }, ctx);
+  }
+  assert.equal(sentMessages.length, 2);
+  assert.match(sentMessages[1].text, /git-rules/, "post-compaction activity on the shorter branch must be observed");
+});
+
+test("session_start + turn_end + session_compact no-op on a stale ctx (sendUserMessage never called)", async () => {
+  const { pi, handlers, sentMessages } = makeFakePi();
+  autocompact(pi as never);
+
+  const rejections: unknown[] = [];
+  const onRejection = (reason: unknown) => {
+    rejections.push(reason);
+  };
+  process.on("unhandledRejection", onRejection);
+  try {
+    const ctx = staleCtx();
+    for (const handler of handlers.session_start) await handler({}, ctx);
+    for (const handler of handlers.turn_end) handler({}, ctx);
+    for (const handler of handlers.session_compact) {
+      handler({ reason: "manual", compactionEntry: { tokensBefore: 1000 } }, ctx);
+    }
+    await flush();
+    assert.equal(rejections.length, 0, `expected no unhandled rejections, got: ${String(rejections[0])}`);
+    assert.equal(sentMessages.length, 0, "a stale ctx must never observe activity, so no follow-up is sent");
+  } finally {
+    process.off("unhandledRejection", onRejection);
+  }
 });
