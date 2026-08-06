@@ -220,7 +220,7 @@ test("decision packets are rejected for outcomes other than needs_decision", () 
 
 test("completed envelopes fail closed for stable handoff, fresh sealed axes, provenance uncertainty, and dispositions", () => {
   const cases: Array<[string, (input: any) => void, string]> = [
-    ["missing axis", (input) => { input.reviews.pop(); input.diversity = { ...input.diversity, achievedIndependence: "axis-missing", degraded: true, cleanPilotEvidence: false, warning: { targetTopology: "three distinct actual providers", configuredProviders: ["producer", "standards", "spec"], actualProviders: ["provider-a", "provider-b", "unknown"], missingOrOverlapping: "Spec axis is missing", qualityConsequence: "not clean pilot evidence", configurationGuidance: "run the separate Spec axis" }, acknowledgment: { actor: "operator", at: "2026-01-01T00:03:00Z", decision: "continue", reason: "test" } }; }, "invalid-review-integrity"],
+    ["missing axis", (input) => { input.reviews.pop(); input.diversity = { ...input.diversity, achievedIndependence: "axis-missing", degraded: true, cleanPilotEvidence: false, warning: { targetTopology: "three distinct actual providers", configuredProviders: ["producer", "falsification", "adversarial-authority"], actualProviders: ["provider-a", "provider-b", "unknown"], missingOrOverlapping: "Adversarial-authority axis is missing", qualityConsequence: "not clean pilot evidence", configurationGuidance: "run the separate Adversarial-authority axis" }, acknowledgment: { actor: "operator", at: "2026-01-01T00:03:00Z", decision: "continue", reason: "test" } }; }, "invalid-review-integrity"],
     ["combined axis calls", (input) => { input.reviews[1].run.runId = input.reviews[0].run.runId; }, "invalid-review-integrity"],
     ["self review", (input) => { input.reviews[0].run.actor = input.runs[0].actor; }, "invalid-provider-diversity"],
     ["rejected parent gate", (input) => { input.parentGate.action = "rejected"; }, "invalid-review-integrity"],
@@ -264,7 +264,7 @@ test("fallback or effective-thinking uncertainty renders a complete acknowledged
   fallback.reviews[0].run.provider.fallback = true;
   fallback.diversity = {
     achievedIndependence: "unknown", degraded: true, cleanPilotEvidence: false,
-    warning: { targetTopology: "three distinct actual providers", configuredProviders: ["producer", "standards", "spec"], actualProviders: ["provider-a", "provider-b", "provider-c"], missingOrOverlapping: "Standards route fell back", qualityConsequence: "correlated blind spots are more likely and this is not clean pilot evidence", configurationGuidance: "configure and verify distinct actual routes" },
+    warning: { targetTopology: "three distinct actual providers", configuredProviders: ["producer", "falsification", "adversarial-authority"], actualProviders: ["provider-a", "provider-b", "provider-c"], missingOrOverlapping: "Falsification route fell back", qualityConsequence: "correlated blind spots are more likely and this is not clean pilot evidence", configurationGuidance: "configure and verify distinct actual routes" },
     acknowledgment: { actor: "operator", at: "2026-01-01T00:03:00Z", decision: "continue", reason: "temporary capacity limit" },
   };
   assert.equal(parseTeamOrchestrationEnvelope(fallback).ok, true);

@@ -174,12 +174,12 @@ test("batch_next coaching requires eligibility, exclusive lease, sealed two-axis
     assert.match(first.content[0].text, /batch_writer_lease/);
     assert.match(first.content[0].text, /writer lease/);
     assert.match(first.content[0].text, /stable writer handoff/);
-    assert.match(first.content[0].text, /Standards and Spec/);
+    assert.match(first.content[0].text, /Falsification and Adversarial-authority/);
     assert.match(first.content[0].text, /degradation acknowledgment/);
     assert.match(first.content[0].text, /one bounded fix/);
     const resumed = await pi.tools.batch_next.execute("x", {}, undefined, undefined, ctx);
     assert.match(resumed.content[0].text, /writer lease/);
-    assert.match(resumed.content[0].text, /Standards and Spec/);
+    assert.match(resumed.content[0].text, /Falsification and Adversarial-authority/);
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });
 

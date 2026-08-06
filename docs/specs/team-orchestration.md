@@ -3,6 +3,7 @@
 > **Lifecycle:** living specification. Update or delete this file in the same change that alters the implemented orchestration contract. Code and tests remain the source of truth.
 > **Decision:** [ADR-0001](../adr/0001-adopt-evidence-gated-serial-team-orchestration.md).
 > **Status:** approved for implementation ticket design; amended by Đạt to allow consciously acknowledged degraded provider diversity with explicit warnings/provenance.
+> **Naming:** the normative review contract (`skills/engineering-workflow/references/code-review.md`, ADR 0001 amendment) now names the axes by method — Axis A — Falsification (legacy/wire label `Standards`) and Axis B — Adversarial authority (legacy/wire label `Spec`). Protocol/state descriptions below keep the wire labels for compatibility; read them through this mapping.
 
 ## Goal
 
@@ -12,7 +13,7 @@ The upgrade must:
 
 1. preserve parent authority over reasoning, validation, finding disposition, and final acceptance;
 2. make completion and escalation evidence structured, replayable, and attributable to one work unit;
-3. preserve separate Standards and Spec review axes with meaningful producer/reviewer independence;
+3. preserve two separate sealed review axes (Axis A — Falsification, Axis B — Adversarial authority; the lib wire identifiers keep the original `standards`/`spec` spelling for state compatibility) with meaningful producer/reviewer independence;
 4. allow an eligibility-routed worker-writer pilot under the existing 10-assignment and T1–T5 rollback window;
 5. keep one mutation owner at a time and prevent reviewers from writing;
 6. keep reusable package policy provider-agnostic while allowing project-local routing.
@@ -32,7 +33,7 @@ The current runtime seam is thinner:
 - `extensions/ticket-runner.ts` exposes `batch_report` with an outcome plus an optional free-form note;
 - `lib/ticket-runner-state.ts` persists lifecycle state but does not represent the full producer, review-axis, parent-replay, claim, or decision evidence contract;
 - batch instructions make the parent the sole implementation and fix writer;
-- batch review combines spec, validation, and code-quality concerns even though the normative review contract separates Standards and Spec axes.
+- batch review combines spec, validation, and code-quality concerns even though the normative review contract separates the two sealed review axes.
 
 This specification makes the existing policy executable at the fan-in boundary without building a general-purpose autonomous scheduler.
 
@@ -63,7 +64,7 @@ These terms define the protocol and should be used consistently in implementatio
 - **Control plane:** parent-owned decisions: scope, architecture, acceptance bar, validation oracle, routing, claim verification, finding disposition, final gate, escalation, and rollback.
 - **Execution plane:** bounded inspection, editing, command execution, evidence collection, or accepted-fix application after the control-plane decisions are frozen.
 - **Writer lease:** exclusive authority to mutate the active worktree for one bounded phase.
-- **Review axis:** one independently prompted judgment surface. Required axes are Standards and Spec.
+- **Review axis:** one independently prompted judgment surface. Required axes are Axis A — Falsification and Axis B — Adversarial authority (wire identifiers `standards`/`spec` retained; see ADR 0001 amendment).
 - **Evidence envelope:** the versioned machine-readable record submitted for a work-unit transition.
 - **Decision packet:** the structured, replayable payload required for `NEEDS_DECISION`.
 - **Parent gate:** the parent’s verdict after it observes primary evidence; it cannot be delegated to the producer or reviewers.

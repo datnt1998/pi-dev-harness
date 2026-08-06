@@ -22,7 +22,7 @@ test("runtime and normative callers require the stable sealed two-axis completio
   const runtime = text("extensions/ticket-runner.ts");
 
   for (const [name, value] of [["policy", policy], ["review", review], ["batch", batch], ["runtime", runtime]] as const) {
-    for (const required of ["stable", "Standards", "Spec", "fresh", "sealed", "fingerprint", "fallback", "effective-model", "effective-thinking", "before", "degraded", "acknowledg"]) {
+    for (const required of ["stable", "Falsification", "Adversarial", "fresh", "sealed", "fingerprint", "fallback", "effective-model", "effective-thinking", "before", "degraded", "acknowledg"]) {
       assert.match(value, new RegExp(required, "i"), `${name}: ${required}`);
     }
   }

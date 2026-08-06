@@ -22,9 +22,14 @@ Stop and request one batched decision when work requires:
 - migration, data loss risk, production, deploy, release, publish, or push;
 - overwriting unrelated dirty work;
 - unresolved validation/review blocker;
-- retry or continuation cap.
+- retry or continuation cap;
+- a red that recurs without a recorded diagnosis.
 
 Continue independent approved work before stopping. Never guess past a safety boundary.
+
+## Red discipline
+
+A red check is evidence, never noise: diagnose it to root cause before touching it again. Never re-roll a red hoping it turns green; a recorded diagnosis is required before any retry. Once a recorded flake is fixed, its color is believed again — re-rolling a repaired check is a violation, not caution. See `diagnosing-bugs.md` for the diagnosis loop; this section does not restate it.
 
 ## Questions
 

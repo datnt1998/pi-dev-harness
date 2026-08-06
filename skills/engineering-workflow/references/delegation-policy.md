@@ -38,6 +38,8 @@ Before every non-trivial delegation, the parent must:
 
 Missing attribution, acceptance policy, important-reasoning classification, or required quota state fails closed.
 
+Availability observations decay. A reachability probe proves reachability, not capacity — when a routing change matters, probe with work-sized input rather than a trivial ping. Availability observations carry timestamps and decay; re-verify before staffing rather than acting on a stale note. A revival or resume path may drop an explicit model override; after any revival, verify the effective route via the effective-model verification rules in §13 rather than restating them here, and prefer re-staffing with an explicit model when the override matters.
+
 ## 3. Delegation brief contract
 
 The parent writes the brief. If the parent can write the complete diff faster than the brief—typically under about 20 lines in one known file—the parent should make the change directly.
@@ -142,7 +144,7 @@ Use `agentContract: { version: 1 }`. Select acceptance at every task/step from t
 | implementation worker | `checked`, or `verified` only with safe deterministic runtime commands | approved scope; changed files, tests, commands, residual risks, and no staged files |
 | Reviewer verdict | minimal `checked` | supplied review scope, findings, verdict, and residual risks |
 
-Reviewer briefs for both the Standards and Spec axes include the review posture, AI-assisted-code risk lens, and pre-submit checklist in `code-review.md`.
+Reviewer briefs for both reviewer axes include the review posture, AI-assisted-code risk lens, and pre-submit checklist in `code-review.md`.
 
 Independent review is a separate run; never ask a worker or reviewer run to label itself `reviewed`. Enable a v1 completion guard only when the workflow deliberately relies on runtime mutation effects; disk-state checks remain mandatory either way.
 
@@ -351,11 +353,11 @@ Arbitration stops at the cheapest decisive rung. Machine evidence settles C1–C
 
 ## 13. Stable-state two-axis review and actual provenance
 
-For high-risk, no-test-bar, and package-policy implementation work, completion requires a parent-observed stable writer handoff fingerprint followed by two separate review calls: Standards and Spec. Both reviewers are fresh-context, observation-only, and inspect that fingerprint. A reviewer role label, no-edit instruction, or read-only acceptance field is not sealing evidence.
+For high-risk, no-test-bar, and package-policy implementation work, completion requires a parent-observed stable writer handoff fingerprint followed by two separate review calls: Axis A — Falsification and Axis B — Adversarial authority. Both reviewers are fresh-context, observation-only, and inspect that fingerprint. A reviewer role label, no-edit instruction, or read-only acceptance field is not sealing evidence.
 
 Each axis records a sealed-reader capability (no mutation tools/project-local output and non-mutating commands) **or** serialized/isolation pre/post implementation fingerprints. A pre/post mismatch is reviewer mutation and disqualifies review. Parallel axes are allowed only when capability sealing is proven; otherwise serialize them. Missing axis, combined call, self-review, stale fingerprint, absent seal, mutation, or a missing/duplicate parent finding disposition fails closed. These evidence-integrity failures never use a degradation exception.
 
-Provider independence is derived only from actual resolved producer/Standards/Spec provenance: provider/model family, fallback state, and verified effective-model/effective-thinking facts. Three distinct actual provider families with no fallback and verified effective route facts are `provider-distinct`. Before launching any affected execution or review stage, provider overlap, fallback, or unknown/unverified effective model or thinking needs a complete pre-execution/setup warning: target topology; configured and actual identities; the missing, overlap, fallback, or uncertainty; quality consequence; configuration guidance; and an explicit continue-or-stop operator action. Only a recorded explicit **continue** acknowledgment permits that stage and the diversity-degraded path. Persist the warning and acknowledgment, repeat them in status and terminal reporting, and label the result degraded—never independent or clean pilot/promotion evidence. Package policy names no concrete provider route or model.
+Provider independence is derived only from actual resolved producer/axis provenance: provider/model family, fallback state, and verified effective-model/effective-thinking facts. Three distinct actual provider families with no fallback and verified effective route facts are `provider-distinct`. Before launching any affected execution or review stage, provider overlap, fallback, or unknown/unverified effective model or thinking needs a complete pre-execution/setup warning: target topology; configured and actual identities; the missing, overlap, fallback, or uncertainty; quality consequence; configuration guidance; and an explicit continue-or-stop operator action. Only a recorded explicit **continue** acknowledgment permits that stage and the diversity-degraded path. Persist the warning and acknowledgment, repeat them in status and terminal reporting, and label the result degraded—never independent or clean pilot/promotion evidence. Package policy names no concrete provider route or model.
 
 Workers and reviewers report observations, findings, locators, and replay recipes only. The parent alone verifies and disposes every load-bearing finding (`accepted`, `rejected` with evidence, `deferred` with residual risk, or `escalated`) and records the final gate.
 

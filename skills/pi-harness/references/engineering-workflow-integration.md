@@ -78,7 +78,7 @@ The surrounding workflow still owns the producer/reviewer sequence: validation c
 - Are engineering workflow commands documented in `AGENTS.md`?
 - Are prompt/skill names reusable across projects?
 - Do implementation prompts define a validation contract and complete the review/fix loop before final summary?
-- Does code review separate Standards and Spec axes while preserving evidence through parent synthesis?
+- Does code review separate the falsification and adversarial-authority axes while preserving evidence through parent synthesis?
 - Are async, fresh/fork, parent authority, single-writer, and escalation semantics documented on demand?
 - Do docs artifacts have default paths (`CONTEXT.md`, `docs/adr/`, `docs/specs/`, `.scratch/`)?
 - Is subagent model routing cost-aware?

@@ -49,7 +49,7 @@ expect(calculateTotal(items)).toBe(expected);
 expect(calculateTotal([{ price: 10 }, { price: 5 }])).toBe(15);
 ```
 
-Expected values must come from an independent source of truth — a known-good literal, a worked example, the spec.
+Expected values must come from an independent source of truth — a known-good literal, a worked example, the spec. See `evidence-binding.md` for the full bind-to-the-thing rule and cardinality/positive-control requirements a proof must satisfy.
 
 **Horizontal slicing** — writing all tests first, then all implementation. Bulk tests verify _imagined_ behavior and go insensitive to real changes. Work in **vertical slices**: one test → one implementation → repeat, each test a tracer bullet responding to what the last cycle taught you.
 

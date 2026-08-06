@@ -20,6 +20,7 @@ Git: <status; proposed/made commit>
 
 ## Rules
 
+- Evidence entered under `Acceptance` must be binding per `evidence-binding.md`, not a copy of the thing it claims to check.
 - Preserve failures; never summarize red checks as success.
 - Separate automated evidence, manual evidence, and assumptions.
 - Review does not replace validation; validation does not replace review.

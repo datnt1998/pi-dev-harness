@@ -25,16 +25,45 @@ git log <fixed-point>..HEAD --oneline
 
 An invalid ref or empty requested diff stops the review before reviewers launch. Report which surface was reviewed. If none can be established, report the evidence gap instead of claiming a complete review.
 
-## Axis 1 — Standards
+## Axis A — Falsification
 
-Review against:
+Attack the guards. For each behavior the diff's tests or validation claim to pin, name a meaning-changing mutation and state whether any guard dies:
 
-- `AGENTS.md`
-- `CONTRIBUTING.md`
-- `README.md`
-- project coding standards
-- existing code style
-- smell baseline below
+- a mutation claim carries the pattern's before/after occurrence counts where applicable;
+- DIED carries the observed red; SURVIVED is stated plainly, never softened;
+- a red produced by a syntax error is not the needed red — the mutation must stay meaning-changing and executable as changed;
+- "this provably cannot go red" is a permitted result when the structural reason is named (e.g., the branch is unreachable, the value is structurally fixed);
+- fabricating a red or silently weakening a claim is a false claim, not a lesser finding.
+
+"Mutation" means any meaning-changing alteration whose detection is claimed, not only a code mutation run through a test suite. For doc-only or otherwise non-executable surfaces, the falsification method degrades to deriving and stating a concrete counter-example the surface's own claim should have caught, and stating plainly whether the surface catches it.
+
+What makes a surviving-or-dying proof binding rather than decorative is governed by `evidence-binding.md`; this axis attacks whatever that reference says a proof must bind to.
+
+## Axis B — Adversarial authority
+
+Read each governing clause and derive the input or scenario that would violate it **before opening the implementation**, then check whether the implementation refuses or handles it. Reading the code first anchors the reviewer into confirming it instead of attacking it.
+
+Governing clauses come from:
+
+- the spec file, PRD, issue, or user request;
+- acceptance criteria;
+- repository standards docs: `AGENTS.md`, `CONTRIBUTING.md`, `README.md`, project coding standards, existing code style.
+
+Find, from the derived violating inputs and scenarios: missing requirements, partial implementation, wrong behavior, scope creep, and untested acceptance criteria.
+
+An authority citation carries the literal quoted text, never a bare line number.
+
+As part of this axis, flag artifact-lifecycle drift: a living spec or context doc that no longer matches the changed code, a plan/report left in an authoritative path, or a decision that should have moved into an ADR (`/skill:repo-hygiene`). Treat a stale authoritative-looking doc as a real finding, not cosmetic.
+
+## Verdict and Framing Rules
+
+PASS requires attempted falsification. "Verified correct" without a named mutation or a named violating input is a restatement of the diff, not a review result. A reviewer that ran no mutations and derived no violating inputs may report observations but may not clear the work.
+
+Briefs phrase checks as open adversarial questions — "confirm or refute: is this rule guarded at all?" — never as a checklist of obligations to confirm; checklist framing invites confirmation instead of attack. Before concluding a reviewer model is weak, check whether it was asked a checklist question rather than an adversarial one.
+
+## Shared Observation Lenses
+
+The smell baseline, review posture, AI-assisted-code risk lens, and pre-submit checklist below apply across both axes as observation lenses. Either axis may report such observations. Observations never substitute for attack evidence in a verdict — a lens finding is not a mutation and is not a derived violating input.
 
 Smell baseline (what it is → usual direction):
 
@@ -53,29 +82,11 @@ Smell baseline (what it is → usual direction):
 
 Repository standards override this baseline. Treat smells as judgment calls, not hard failures, and skip issues already enforced by tooling.
 
-## Axis 2 — Spec
-
-Review against:
-
-- issue
-- spec file
-- PRD
-- user request
-- acceptance criteria
-
-Find:
-
-- missing requirements
-- partial implementation
-- wrong behavior
-- scope creep
-- untested acceptance criteria
-
-## Review Posture
+### Review Posture
 
 Assume the diff may be AI-authored. Polished structure, confident comments, and passing happy-path tests are not evidence of correctness — verify against the diff, surrounding code, project rules, and runnable checks. No rubber-stamping or praise padding. Be hostile to defects and scope creep while keeping the report professional and evidence-based.
 
-## AI-Assisted-Code Risk Lens
+### AI-Assisted-Code Risk Lens
 
 Both axes apply this lens:
 
@@ -86,7 +97,7 @@ Both axes apply this lens:
 - phantom tests that execute code without proving behavior;
 - unrelated files, broad rewrites, or drift from the stated task.
 
-## Pre-Submit Checklist
+### Pre-Submit Checklist
 
 Verify before returning findings:
 
@@ -100,7 +111,7 @@ Verify before returning findings:
 - no PII, secrets, or stack traces leaking outward;
 - when a plan/spec is provided, its file paths, symbols, and behavioral claims are re-verified by grep against the actual codebase.
 
-Reviewer briefs built from `delegation-policy.md` include this posture and lens for both the Standards and Spec axes.
+Reviewer briefs built from `delegation-policy.md` include this posture and these lenses for both reviewer axes.
 
 ## Simplicity Pass (optional)
 
@@ -110,8 +121,8 @@ An optional read-only reviewer angle: behavior-preserving simplification proposa
 
 Start review only after the writer lease is closed and the parent records one stable implementation fingerprint. Launch two **separate fresh-context, observation-only review calls** under `delegation-policy.md`, both against that exact fingerprint:
 
-- Standards axis: maintainability, security, test quality, repository conventions, simplicity, and code-quality risks.
-- Spec axis: approved scope, behavior, acceptance criteria, validation evidence, exclusions, and unsupported completion claims.
+- Axis A — Falsification: attack the guards claimed by the diff's tests and validation.
+- Axis B — Adversarial authority: derive violating inputs/scenarios from the governing clauses and check the implementation against them.
 
 A role label, no-edit instruction, or read-only acceptance metadata does not seal a reviewer. Each record must prove either a capability-sealed reader (no mutation tools/output path and non-mutating commands) or serialized/isolation evidence with parent-observed pre/post implementation fingerprints. Any changed pre/post fingerprint disqualifies that review. The axes may run in parallel only after both capability seals are proven; otherwise serialize them. A missing axis, one combined call, self-review, stale fingerprint, unsealed review, or reviewer mutation fails closed; provider-diversity degradation never excuses those failures.
 
@@ -119,7 +130,7 @@ Before launching an affected review stage, compare the target topology with conf
 
 Reviewers inspect the actual diff and source files, cite file/line evidence, and never certify completion or their own gate. Their actionable findings use the policy's claims table and replay/check convention. The parent verifies and records one disposition for every load-bearing finding (`accepted`, `rejected` with disconfirming evidence, `deferred` with residual risk, or `escalated`), then applies only accepted fixes. Keep reports and severity judgments separate; do not collapse or rerank findings across axes.
 
-As part of the Spec axis, flag artifact-lifecycle drift: a living spec or context doc that no longer matches the changed code, a plan/report left in an authoritative path, or a decision that should have moved into an ADR (`/skill:repo-hygiene`). Treat a stale authoritative-looking doc as a real finding, not cosmetic.
+Before staffing review, the parent runs a small number of quick mutations itself. A surviving mutant goes into the reviewer brief as a direct question, not a hint. Mutation records are verified by sampling re-run of load-bearing rows: the parent personally re-runs the rows a verdict or fix round would rest on. A record is never accepted by format or parser alone.
 
 The parent then classifies findings as blockers, fixes worth doing now, optional/deferred improvements, or feedback to ignore. For implementation-authorized work, apply accepted fixes through one writer and re-run focused review when the fix is substantial. Stop for unapproved product, architecture, API, data, or scope decisions.
 
@@ -127,4 +138,4 @@ If sealed fresh reviewer calls are unavailable or their budget is exhausted, rec
 
 ## Final Report
 
-Before submitting findings, run an ATTACK-style pass against the review's own conclusions (`/skill:reasoning-discipline`): try to kill each finding with a cheap check before reporting it. Preserve Standards and Spec findings separately. On pass, report one terse line. On findings, list only actionable items ordered by severity, evidence gaps, accepted/deferred fixes, and whether re-review is required. Map acceptance criteria through `completion-evidence.md`; never infer pass from missing evidence.
+Before submitting findings, run an ATTACK-style pass against the review's own conclusions (`/skill:reasoning-discipline`): try to kill each finding with a cheap check before reporting it. Preserve Axis A and Axis B findings separately. On pass, report one terse line. On findings, list only actionable items ordered by severity, evidence gaps, accepted/deferred fixes, and whether re-review is required. Map acceptance criteria through `completion-evidence.md`; never infer pass from missing evidence.

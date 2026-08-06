@@ -17,3 +17,7 @@ The harness will use a thin, versioned runtime evidence/decision protocol around
 - High-risk, no-test-bar, and package-policy work targets provider-independent producer, Standards, and Spec axes. A diversity shortfall is `degraded`, not independent; continuation requires explicit user/operator acknowledgment and cannot count as clean independence or pilot-promotion evidence.
 - The temporary project-local topology is `llmgate` producer, `xai` Standards review, and `qwencloud` Spec/evidence review. This mapping is configuration, not reusable package policy.
 - The package expresses capabilities, achieved-independence levels, warnings, and acknowledgment requirements generically. Provider/model assignments remain project-local configuration.
+
+## Signed amendment — review axes re-cut by method
+
+The two sealed review axes were re-cut by method rather than subject: Axis A — Falsification (attack the guards via named mutations) and Axis B — Adversarial authority (derive violating inputs from governing clauses before opening the implementation). Subject-named axes invited conformance checking. Everything else in this decision — sealing, separation, distinct-provider target, parent disposition — is unchanged; `skills/engineering-workflow/references/code-review.md` defines the axes. The lib wire identifiers keep their original spelling for state compatibility.

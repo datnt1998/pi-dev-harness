@@ -30,7 +30,7 @@ This skill supports these phases. The user may call a phase directly through pro
 - `to-spec` — turn conversation/context into a concrete spec.
 - `to-tickets` — split a spec/plan into small tracer-bullet tickets.
 - `implement` — implement approved work in small tested slices.
-- `code-review` — review changes along Standards and Spec axes, preferably with parallel subagents.
+- `code-review` — review changes along the falsification and adversarial-authority axes, preferably with parallel subagents.
 - `diagnose` — disciplined bug diagnosis loop.
 - `handoff` — create continuation notes for another session/agent.
 
@@ -100,8 +100,8 @@ Treat a worker handoff as intermediate: validate from the parent, run independen
 
 For two-axis review, use focused fresh-context reviewers:
 
-- Standards reviewer: coding standards, maintainability, smells, simplicity.
-- Spec reviewer: requested behavior, acceptance criteria, tests, and validation evidence.
+- Axis A — Falsification reviewer: attacks the guards the diff's tests/validation claim, via named mutations.
+- Axis B — Adversarial authority reviewer: derives violating inputs/scenarios from governing clauses and checks the implementation against them.
 
 ## Workflow Summaries
 
@@ -147,8 +147,8 @@ Rules:
 Read `references/code-review.md` and `references/completion-evidence.md`.
 
 Review axes:
-- **Standards** — repo conventions, maintainability, smell baseline.
-- **Spec** — requested behavior, missing requirements, scope creep.
+- **Axis A — Falsification** — attack the guards via named mutations.
+- **Axis B — Adversarial authority** — derive violating inputs/scenarios from governing clauses.
 
 Keep findings separated.
 
@@ -179,6 +179,7 @@ Load only when needed:
 - `references/pi-harness-integration.md` — boundary and handoff between engineering workflow and Pi harness work.
 - `references/autonomous-execution.md` — approval envelope, stop conditions, batched questions, terse reporting.
 - `references/completion-evidence.md` — acceptance-to-evidence completion contract.
+- `references/evidence-binding.md` — what makes a proof binding: bind-to-the-thing, authority-sourced expected values, cardinality witnesses, positive control, tier blindness.
 - `references/delegation-policy.md` — normative subagent routing, launch, control, fidelity, and claim-verification contract.
 - `references/legacy-refactor.md` — brownfield safety: characterization/golden tests to pin current behavior before refactoring untested code.
 - `references/research.md` — source-backed research flow using `pi-web-access` and `researcher`.
