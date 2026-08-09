@@ -234,27 +234,27 @@ export function buildCompactionFocus(params: {
 }
 
 /**
- * Build the one-shot post-compaction re-orientation follow-up (R3): names
- * previously active skills (with paths where known) and effort directories,
- * instructing a re-read before acting on them, plus a reminder that
- * always-loaded project rules remain in force. Returns undefined when
- * nothing was observed (no follow-up is sent).
+ * Build the one-shot post-compaction re-orientation follow-up (R3): names the
+ * skills (with paths where known) and effort directories active in the window
+ * that was just summarized away, instructing a LAZY re-read — only when next
+ * acting under that skill or effort, never a preemptive re-read of everything
+ * (that would re-spend the tokens compaction just reclaimed). Returns
+ * undefined when nothing was observed (no follow-up is sent).
  */
 export function buildReorientationMessage(observations: ActivityObservations): string | undefined {
   if (observations.skills.length === 0 && observations.efforts.length === 0) return undefined;
 
-  const lines: string[] = ["Context was just compacted. Before continuing:"];
-  for (const skill of observations.skills) {
-    lines.push(
-      skill.path
-        ? `- Re-read ${skill.path} before acting under the "${skill.name}" skill — do not act from summarized memory.`
-        : `- Re-read the "${skill.name}" skill's SKILL.md before acting under it — do not act from summarized memory.`,
-    );
+  const lines: string[] = [
+    "Context was just compacted. Do NOT re-read anything now. Only when you next act under one of these, re-read its file first instead of trusting summarized memory:",
+  ];
+  if (observations.skills.length > 0) {
+    const skillList = observations.skills.map((s) => (s.path ? `"${s.name}" (${s.path})` : `"${s.name}" (its SKILL.md)`)).join(", ");
+    lines.push(`- Skills: ${skillList}`);
   }
-  for (const effort of observations.efforts) {
-    lines.push(`- Re-read .scratch/${effort}/'s index/tickets before continuing that effort.`);
+  if (observations.efforts.length > 0) {
+    lines.push(`- Efforts: ${observations.efforts.map((e) => `.scratch/${e}/ (its index/tickets)`).join(", ")}`);
   }
-  lines.push("Always-loaded project rules (AGENTS.md / APPEND_SYSTEM) remain in force.");
+  lines.push("Always-loaded project rules (AGENTS.md / APPEND_SYSTEM) remain in force. Continue the task in progress.");
   return lines.join("\n");
 }
 

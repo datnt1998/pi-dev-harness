@@ -591,17 +591,19 @@ test("buildCompactionFocus suppresses the auto-preserve block when reorient is o
   assert.equal(buildCompactionFocus({ observations, reorientEnabled: false }), undefined);
 });
 
-test("buildReorientationMessage names skills+paths and effort dirs, with a re-read instruction", () => {
+test("buildReorientationMessage names skills+paths and effort dirs, with a LAZY re-read instruction", () => {
   const msg = buildReorientationMessage({
     skills: [{ name: "batch-implementation", path: "skills/batch-implementation/SKILL.md" }, { name: "unknown-path-skill", path: undefined }],
     efforts: ["compaction-recovery"],
   })!;
   assert.match(msg, /skills\/batch-implementation\/SKILL\.md/);
-  assert.match(msg, /re-read/i);
-  assert.match(msg, /do not act from summarized memory/i);
+  assert.match(msg, /Do NOT re-read anything now/);
+  assert.match(msg, /when you next act under one of these/i);
+  assert.match(msg, /summarized memory/i);
   assert.match(msg, /\.scratch\/compaction-recovery\//);
   assert.match(msg, /index\/tickets/);
   assert.match(msg, /always-loaded/i);
+  assert.match(msg, /Continue the task in progress/);
 });
 
 test("buildReorientationMessage returns undefined when nothing was observed", () => {

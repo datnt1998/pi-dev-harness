@@ -16,10 +16,11 @@
  *   focus <text|clear> | native on|off | reorient on|off | now [instructions].
  * - Compaction context recovery: tracks skill activations (`/skill:<name>`,
  *   `skills/<name>/SKILL.md` paths) and `.scratch/<effort>/` directories seen
- *   on the branch. Extension-triggered compaction without explicit
- *   instructions steers the summary to preserve them; every `session_compact`
- *   (any source) sends one post-compaction follow-up naming what to re-read
- *   before acting on it (no full skill/reference re-injection). Toggle with
+ *   on the branch SINCE the previous compaction (windowed — stale skills age
+ *   out). Extension-triggered compaction without explicit instructions steers
+ *   the summary to preserve them; every `session_compact` (any source) sends
+ *   one post-compaction follow-up naming what to LAZILY re-read on next use
+ *   (never a preemptive re-read, never full re-injection). Toggle with
  *   `reorient on|off` (default on).
  *
  * Settings are layered:
@@ -371,14 +372,19 @@ export default function autocompact(pi: ExtensionAPI) {
     updateIndicator(ctx);
 
     // The branch-scan cursor resets after any compaction (old entries are gone
-    // from the live branch); in-memory observations survive it so a second
-    // compaction with no new activity still re-orients on what's already known.
+    // from the live branch). Observations are WINDOWED per compaction: the
+    // follow-up covers only activity since the previous compaction, then the
+    // window resets. A skill still in use re-enters the next window on its
+    // next sighting (including the agent's own lazy re-read), so stale skills
+    // age out instead of being re-announced forever.
+    const windowObservations = state.observations;
+    state.observations = { skills: [], efforts: [] };
     safeCtx(() => {
       state.branchCursor = ctx.sessionManager.getBranch().length;
     });
 
     if (state.settings.reorient === false) return;
-    const message = buildReorientationMessage(state.observations);
+    const message = buildReorientationMessage(windowObservations);
     if (!message) return;
     // sendUserMessage is on `pi`, not `ctx` — no stale-ctx guard needed for the
     // call itself, but a failure here must never be fatal (R5).

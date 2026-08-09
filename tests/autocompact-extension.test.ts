@@ -373,7 +373,7 @@ test("no follow-up is sent when reorient is off, even with observations", async 
   assert.equal(sentMessages.length, 0, "reorient off suppresses the follow-up");
 });
 
-test("session_compact resets the branch-scan cursor but keeps observations for the next compaction", async () => {
+test("observations are WINDOWED per compaction: no re-announcement without new activity; stale skills age out", async () => {
   const { pi, handlers, sentMessages } = makeFakePi();
   autocompact(pi as never);
 
@@ -387,13 +387,23 @@ test("session_compact resets the branch-scan cursor but keeps observations for t
     handler({ reason: "manual", compactionEntry: { tokensBefore: 5000 } }, ctx);
   }
   assert.equal(sentMessages.length, 1);
+  assert.match(sentMessages[0].text, /batch-implementation/);
 
-  // Second compaction with no new activity: observations survive, follow-up fires again.
-  for (const handler of handlers.turn_end) handler({}, ctx); // no new entries since cursor reset
+  // Second compaction with NO new activity: the window is empty, so no follow-up
+  // re-announces a stale skill (token discipline: stale context ages out).
+  for (const handler of handlers.turn_end) handler({}, ctx); // nothing new since cursor reset
   for (const handler of handlers.session_compact) {
     handler({ reason: "manual", compactionEntry: { tokensBefore: 3000 } }, ctx);
   }
-  assert.equal(sentMessages.length, 2, "observations persist across compaction; a second compact re-sends");
+  assert.equal(sentMessages.length, 1, "no new activity means no second follow-up");
+
+  // A skill used again (e.g. the agent's own lazy re-read) re-enters the window.
+  entries.push(effortToolCallEntry("skills/batch-implementation/SKILL.md"));
+  for (const handler of handlers.turn_end) handler({}, ctx);
+  for (const handler of handlers.session_compact) {
+    handler({ reason: "manual", compactionEntry: { tokensBefore: 2000 } }, ctx);
+  }
+  assert.equal(sentMessages.length, 2, "renewed activity re-orients on the next compaction");
   assert.match(sentMessages[1].text, /batch-implementation/);
 });
 
@@ -472,6 +482,7 @@ test("activity after a compaction that REPLACES the branch with a shorter one is
   }
   assert.equal(sentMessages.length, 2);
   assert.match(sentMessages[1].text, /git-rules/, "post-compaction activity on the shorter branch must be observed");
+  assert.doesNotMatch(sentMessages[1].text, /batch-implementation/, "skills from before the previous compaction are not re-announced");
 });
 
 test("session_start + turn_end + session_compact no-op on a stale ctx (sendUserMessage never called)", async () => {
