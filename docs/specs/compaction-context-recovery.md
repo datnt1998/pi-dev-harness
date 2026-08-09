@@ -17,10 +17,10 @@ After any compaction (extension-triggered, native idle, or overflow), the sessio
 
 ## Requirements
 
-- **R1 — Activity tracking (pure).** `lib/autocompact-core.ts` gains pure, tested functions that scan session-branch entries and extract:
-  - **skill activations**: user messages invoking `/skill:<name>` and tool calls/results referencing a path ending in `skills/<name>/SKILL.md` (both detection routes; name plus best-known path recorded once per skill);
-  - **effort directories**: paths matching `.scratch/<effort>/` in message or tool text (deduplicated effort names).
-  Scanning is incremental-friendly: callers pass a slice of entries; the extension owns the cursor. Malformed/unknown entry shapes are skipped, never thrown on.
+- **R1 — Activity tracking (pure, usage signals only).** `lib/autocompact-core.ts` gains pure, tested functions that scan session-branch entries and extract:
+  - **skill activations**: user messages invoking `/skill:<name>`, and tool-call **arguments** referencing a path ending in `skills/<name>/SKILL.md` (deliberate file access; name plus best-known path recorded once per skill);
+  - **effort directories**: `.scratch/<effort>/` paths in user messages or tool-call arguments (deduplicated effort names).
+  **Mentions are not usage**: tool results, assistant prose, and bare path mentions in user text are never scanned — a directory listing, grep, or pack output names every skill in the repository and would otherwise mark the whole catalog active. User messages carrying the re-orientation sentinel (the extension's own follow-ups, which name paths) are skipped entirely so a follow-up can never re-seed the next window. Scanning is incremental-friendly: callers pass a slice of entries; the extension owns the cursor. Malformed/unknown entry shapes are skipped, never thrown on.
 - **R2 — Steered summary.** When the extension triggers compaction (auto or `/autocompact now` without explicit instructions), the effective custom instructions are the user's configured focus (if any) composed with an auto-generated preserve block naming: active skills (names + paths), active effort directories, current task/phase state, and any open lease/batch state. A pure `buildCompactionFocus` composes this; explicit `now <instructions>` still wins unchanged. Native/overflow compaction cannot be steered — R3 covers it.
 - **R3 — Post-compaction re-orientation (windowed, lazy).** On `session_compact` (any source), when observations exist and the feature is enabled, the extension sends one follow-up user message (`pi.sendUserMessage`, `deliverAs: "followUp"`) built by a pure `buildReorientationMessage`. The message instructs a **lazy** re-read: nothing is re-read immediately; only when next acting under a listed skill or continuing a listed effort is its file re-read instead of trusting summarized memory. Observations are **windowed per compaction**: the follow-up covers only activity since the previous compaction, then the window resets — a skill still in use re-enters the next window on its next sighting (including the agent's own lazy re-read), so stale skills age out instead of being re-announced forever. No message when the window is empty. The branch-scan cursor resets after compaction.
 - **R4 — Toggle and status.** New boolean setting `reorient` (default on), normalized like existing fields, persisted the same way, controlled via `/autocompact reorient on|off`, shown in `/autocompact status` and help text. When off, R2's auto-preserve block and R3's follow-up are both suppressed (user focus text still applies).
@@ -37,7 +37,7 @@ After any compaction (extension-triggered, native idle, or overflow), the sessio
 ## Risks / Edge Cases
 
 - Follow-up injection consumes a small turn after each compaction; gated on observations existing and `reorient` on.
-- Detection is heuristic (string patterns); false negatives acceptable, false positives limited by the two narrow patterns.
+- Detection is heuristic (string patterns); false negatives acceptable by design — the usage-signal narrowing (arguments only, mentions ignored) trades recall for precision, because a false positive costs tokens on every subsequent compaction.
 - Consecutive compactions re-orient only on the window of activity between them; a session that stopped using a skill stops paying for its announcement.
 
 ## Validation Plan

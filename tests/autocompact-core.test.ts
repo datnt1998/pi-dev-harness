@@ -11,6 +11,7 @@ import {
   NATIVE_RESERVE_DEFAULT,
   evaluateAutoCompact,
   extractActivityObservations,
+  REORIENTATION_SENTINEL,
   formatCompactionReport,
   formatIndicatorLine,
   formatIndicatorThemed,
@@ -497,26 +498,44 @@ test("extractActivityObservations detects /skill: invocations in user messages",
   assert.deepEqual(obs.efforts, []);
 });
 
-test("extractActivityObservations detects SKILL.md paths in tool calls and results", () => {
+test("extractActivityObservations detects SKILL.md paths in tool-call ARGUMENTS only", () => {
   const fromCall = extractActivityObservations([
     assistantToolCallEntry("read", { path: "/repo/skills/batch-implementation/SKILL.md" }),
   ]);
   assert.equal(fromCall.skills.length, 1);
   assert.equal(fromCall.skills[0].name, "batch-implementation");
   assert.match(fromCall.skills[0].path ?? "", /skills\/batch-implementation\/SKILL\.md$/);
+});
 
-  const fromResult = extractActivityObservations([
-    toolResultEntry("read", "contents of skills/response-quality/SKILL.md loaded"),
+test("extractActivityObservations ignores MENTIONS: tool results, listings, assistant prose, bare paths in user text", () => {
+  // A directory listing / grep / pack output names every skill in the catalog;
+  // treating mentions as usage marks the whole catalog active after compaction.
+  const obs = extractActivityObservations([
+    toolResultEntry("bash", "skills/pdf/SKILL.md\nskills/docx/SKILL.md\nskills/git-rules/SKILL.md\nsee .scratch/old-effort/notes.md"),
+    {
+      type: "message",
+      message: { role: "assistant", content: [{ type: "text", text: "I checked skills/wayfinder/SKILL.md and .scratch/stale-effort/plan.md" }] },
+    },
+    userMessageEntry("please look at skills/xlsx/SKILL.md sometime"),
   ]);
-  assert.equal(fromResult.skills.length, 1);
-  assert.equal(fromResult.skills[0].name, "response-quality");
+  assert.deepEqual(obs, { skills: [], efforts: [] });
+});
+
+test("extractActivityObservations skips the extension's own sentinel-tagged follow-up (no self-seeding)", () => {
+  const followUp = buildReorientationMessage({
+    skills: [{ name: "batch-implementation", path: "skills/batch-implementation/SKILL.md" }],
+    efforts: ["compaction-recovery"],
+  })!;
+  assert.ok(followUp.includes(REORIENTATION_SENTINEL), "follow-up carries the sentinel");
+  const obs = extractActivityObservations([userMessageEntry(followUp)]);
+  assert.deepEqual(obs, { skills: [], efforts: [] });
 });
 
 test("extractActivityObservations extracts and dedups .scratch/<effort>/ directories", () => {
   const obs = extractActivityObservations([
     userMessageEntry("working under .scratch/compaction-recovery/tickets.md"),
     assistantToolCallEntry("read", { path: ".scratch/compaction-recovery/plan.md" }),
-    toolResultEntry("read", "see .scratch/other-effort/notes.md too"),
+    assistantToolCallEntry("read", { path: ".scratch/other-effort/notes.md" }),
   ]);
   assert.deepEqual(obs.efforts, ["compaction-recovery", "other-effort"].sort());
 });

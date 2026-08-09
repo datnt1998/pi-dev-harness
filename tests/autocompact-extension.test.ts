@@ -485,6 +485,31 @@ test("activity after a compaction that REPLACES the branch with a shorter one is
   assert.doesNotMatch(sentMessages[1].text, /batch-implementation/, "skills from before the previous compaction are not re-announced");
 });
 
+test("the extension's own follow-up landing on the branch never re-seeds the next window", async () => {
+  const { pi, handlers, sentMessages } = makeFakePi();
+  autocompact(pi as never);
+
+  const entries: unknown[] = [];
+  const ctx = liveCtx(entries);
+  for (const handler of handlers.session_start) await handler({}, ctx);
+
+  entries.push(skillMessageEntry("/skill:batch-implementation continue"));
+  for (const handler of handlers.turn_end) handler({}, ctx);
+  for (const handler of handlers.session_compact) {
+    handler({ reason: "manual", compactionEntry: { tokensBefore: 5000 } }, ctx);
+  }
+  assert.equal(sentMessages.length, 1);
+
+  // The sent follow-up lands on the branch as a user message (it names skill
+  // paths and effort dirs) and gets scanned on the next turn boundary.
+  entries.push(skillMessageEntry(sentMessages[0].text));
+  for (const handler of handlers.turn_end) handler({}, ctx);
+  for (const handler of handlers.session_compact) {
+    handler({ reason: "manual", compactionEntry: { tokensBefore: 3000 } }, ctx);
+  }
+  assert.equal(sentMessages.length, 1, "a follow-up must never count as activity for the next window");
+});
+
 test("session_start + turn_end + session_compact no-op on a stale ctx (sendUserMessage never called)", async () => {
   const { pi, handlers, sentMessages } = makeFakePi();
   autocompact(pi as never);

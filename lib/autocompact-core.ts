@@ -147,17 +147,38 @@ function recordSkill(map: Map<string, SkillObservation>, name: string, path?: st
   map.set(name, { name, path });
 }
 
-function scanTextForSkillsAndEfforts(text: string, skills: Map<string, SkillObservation>, efforts: Set<string>): void {
+/**
+ * First line of every re-orientation follow-up. The extractor skips any user
+ * message carrying it so the extension's own announcements (which name skill
+ * paths and effort dirs) can never re-seed the next observation window —
+ * without this, every follow-up would perpetually re-announce the same list.
+ */
+export const REORIENTATION_SENTINEL = "[autocompact reorientation]";
+
+function scanUserText(text: string, skills: Map<string, SkillObservation>, efforts: Set<string>): void {
+  // User messages count only EXPLICIT skill invocations and effort mentions.
+  // Bare `skills/<name>/SKILL.md` path mentions in prose are not usage signals.
   for (const match of text.matchAll(SKILL_INVOKE_RE)) recordSkill(skills, match[1]);
+  for (const match of text.matchAll(EFFORT_DIR_RE)) efforts.add(match[1]);
+}
+
+function scanToolCallArguments(text: string, skills: Map<string, SkillObservation>, efforts: Set<string>): void {
+  // Tool-call ARGUMENTS signal deliberate access (a read/edit of the file).
+  // Tool RESULTS and assistant prose are deliberately not scanned: directory
+  // listings, greps, and pack output mention every skill path in the
+  // repository and would mark the entire catalog as active.
   for (const match of text.matchAll(SKILL_PATH_RE)) recordSkill(skills, match[2], match[1]);
   for (const match of text.matchAll(EFFORT_DIR_RE)) efforts.add(match[1]);
 }
 
 /**
  * Scan a slice of session-branch entries (as returned by
- * `ctx.sessionManager.getBranch()`) and extract skill activations
- * (`/skill:<name>` in user messages; `skills/<name>/SKILL.md` paths in tool
- * calls/results) and `.scratch/<effort>/` directories (R1). Callers own the
+ * `ctx.sessionManager.getBranch()`) and extract USAGE signals only (R1):
+ * `/skill:<name>` invocations in user messages, and `skills/<name>/SKILL.md`
+ * or `.scratch/<effort>/` paths in tool-call arguments (deliberate file
+ * access). Mere mentions — tool results, assistant prose, directory listings
+ * — are not scanned, and user messages carrying `REORIENTATION_SENTINEL`
+ * (the extension's own follow-ups) are skipped entirely. Callers own the
  * incremental cursor; this function only scans the entries it is given.
  * Malformed/unknown entry shapes are skipped silently, never thrown on.
  */
@@ -175,21 +196,17 @@ export function extractActivityObservations(entries: readonly unknown[]): Activi
       const m = message as Record<string, unknown>;
 
       if (m.role === "user") {
-        scanTextForSkillsAndEfforts(textOf(m.content), skills, efforts);
+        const text = textOf(m.content);
+        if (text.includes(REORIENTATION_SENTINEL)) continue; // never self-seed from our own follow-up
+        scanUserText(text, skills, efforts);
       } else if (m.role === "assistant") {
         const content = m.content;
         if (!Array.isArray(content)) continue;
         for (const block of content) {
           if (!block || typeof block !== "object") continue;
           const b = block as Record<string, unknown>;
-          if (b.type === "toolCall") {
-            scanTextForSkillsAndEfforts(safeStringify(b.arguments), skills, efforts);
-          } else if (b.type === "text" && typeof b.text === "string") {
-            scanTextForSkillsAndEfforts(b.text, skills, efforts);
-          }
+          if (b.type === "toolCall") scanToolCallArguments(safeStringify(b.arguments), skills, efforts);
         }
-      } else if (m.role === "toolResult") {
-        scanTextForSkillsAndEfforts(textOf(m.content), skills, efforts);
       }
     } catch {
       continue; // malformed entry: skip silently, never throw
@@ -245,7 +262,7 @@ export function buildReorientationMessage(observations: ActivityObservations): s
   if (observations.skills.length === 0 && observations.efforts.length === 0) return undefined;
 
   const lines: string[] = [
-    "Context was just compacted. Do NOT re-read anything now. Only when you next act under one of these, re-read its file first instead of trusting summarized memory:",
+    `${REORIENTATION_SENTINEL} Context was just compacted. Do NOT re-read anything now. Only when you next act under one of these, re-read its file first instead of trusting summarized memory:`,
   ];
   if (observations.skills.length > 0) {
     const skillList = observations.skills.map((s) => (s.path ? `"${s.name}" (${s.path})` : `"${s.name}" (its SKILL.md)`)).join(", ");

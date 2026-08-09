@@ -14,10 +14,11 @@
  *   safety net (~contextWindow - reserveTokens).
  * - `/autocompact` command: status | on | off | at <pct|tokens> | warn <pct> |
  *   focus <text|clear> | native on|off | reorient on|off | now [instructions].
- * - Compaction context recovery: tracks skill activations (`/skill:<name>`,
- *   `skills/<name>/SKILL.md` paths) and `.scratch/<effort>/` directories seen
- *   on the branch SINCE the previous compaction (windowed — stale skills age
- *   out). Extension-triggered compaction without explicit instructions steers
+ * - Compaction context recovery: tracks genuine USAGE signals — `/skill:<name>`
+ *   invocations and `skills/<name>/SKILL.md` / `.scratch/<effort>/` paths in
+ *   tool-call arguments (mentions in listings/greps/results never count) —
+ *   seen on the branch SINCE the previous compaction (windowed — stale skills
+ *   age out; the extension's own sentinel-tagged follow-ups are never scanned). Extension-triggered compaction without explicit instructions steers
  *   the summary to preserve them; every `session_compact` (any source) sends
  *   one post-compaction follow-up naming what to LAZILY re-read on next use
  *   (never a preemptive re-read, never full re-injection). Toggle with
