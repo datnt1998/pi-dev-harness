@@ -39,6 +39,17 @@ Attack the guards. For each behavior the diff's tests or validation claim to pin
 
 What makes a surviving-or-dying proof binding rather than decorative is governed by `evidence-binding.md`; this axis attacks whatever that reference says a proof must bind to.
 
+### Falsification economics
+
+Mutation review is the most tool-heavy review style: every mutation is a read-edit-run-revert loop, and each loop re-reads the reviewer's entire growing context. Costs compound per loop, so the battery's size and each loop's output hygiene dominate the bill. Rules for whoever staffs this axis:
+
+- **Parent mutates first, child gets the residue.** The delegating agent runs the cheap decisive mutations itself before staffing the axis; the child's brief enumerates only the specific guards the parent could not falsify — an open-ended "attack everything" mandate turns one review into a research project.
+- **Each question ships with its focused check.** The brief names, per mutation question, the single test file (or narrowest command) that would go red, and requires filtered output — pass/fail lines and failure names only, never a full raw test log into context.
+- **Full suite once, at the end.** One whole-suite plus package-check run after the last revert confirms restoration; per-mutation loops use focused runs only.
+- **Fingerprint twice, not per cycle.** Seal verification happens at start and at final exit; re-hashing after every revert multiplies loops without adding evidence — the final hash already proves cumulative restoration.
+- **Report the table, not the journey.** The deliverable is the mutation record and dispositions; per-cycle narration re-spends every loop a second time in prose.
+- **Budget the child.** The delegating agent bounds the run (tool or turn budget) sized to the enumerated battery, so a stuck loop fails fast instead of burning quietly.
+
 ## Axis B — Adversarial authority
 
 Read each governing clause and derive the input or scenario that would violate it **before opening the implementation**, then check whether the implementation refuses or handles it. Reading the code first anchors the reviewer into confirming it instead of attacking it.
