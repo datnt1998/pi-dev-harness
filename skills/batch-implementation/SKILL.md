@@ -76,8 +76,9 @@ Dependencies: if a ticket fails, blocks, or is marked `needs_decision`, the exte
 
 ## Commit policy
 
-- Default (`/implement-all <path>`): do not commit. Prepare a commit-ready checkpoint per `/skill:git-rules` at the end.
-- With `--commit`: after a ticket is validated and review is clean, commit only that ticket using `/skill:git-rules` — inspect diff, stage exact paths (never `git add -A`), one Conventional Commit per ticket. If the repo has unrelated/dirty changes, stop and escalate instead of committing.
+- Commit granularity is owned by `/skill:git-rules` ("Long-horizon work commits per ticket, not per batch"): before starting the loop, secure per-ticket commit authorization once. `--commit` or an explicit batch approval is that authorization.
+- When authorized: after a ticket is validated and review is clean, commit only that ticket using `/skill:git-rules` — inspect diff, stage exact paths (never `git add -A`), one Conventional Commit per ticket, at that ticket's boundary (never deferred past the next ticket's first edit). If the repo has unrelated/dirty changes, stop and escalate instead of committing.
+- When the user declines per-ticket commits: proceed uncommitted but produce a per-ticket commit-ready summary at each boundary; a single end-of-batch mega-commit is a reportable deviation, not a default.
 
 ## Completion
 

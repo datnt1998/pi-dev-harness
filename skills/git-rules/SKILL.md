@@ -18,6 +18,7 @@ Use this skill whenever work reaches a commit boundary, especially after `/imple
    - Prefer one ticket or one coherent vertical slice per commit.
    - Keep harness/Pi-resource changes separate from product app changes when practical.
    - Split unrelated docs, harness, and product code if they can stand alone.
+   - **Long-horizon work commits per ticket, not per batch.** On multi-ticket runs, each ticket that passes validation and review gets its own commit at that boundary. Two or more completed tickets sitting uncommitted in one working tree is checkpoint debt: later tickets can silently touch earlier tickets' files, the eventual mega-commit cannot be bisected or reverted per ticket, and review evidence loses its binding to a specific change. When commit permission is absent, secure per-ticket authorization once at the start of the run instead of accumulating; if the user declines, keep a per-ticket commit-ready summary at each boundary so the split is still recoverable at the end.
 
 3. **Evidence before commit**
    - Inspect `git status --short`.
