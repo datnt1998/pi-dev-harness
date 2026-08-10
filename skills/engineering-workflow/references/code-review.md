@@ -44,6 +44,8 @@ Attack the guards. For each behavior the diff's tests or validation claim to pin
 
 "Mutation" means any meaning-changing alteration whose detection is claimed, not only a code mutation run through a test suite. For doc-only or otherwise non-executable surfaces, the falsification method degrades to deriving and stating a concrete counter-example the surface's own claim should have caught, and stating plainly whether the surface catches it.
 
+The same degradation applies per behavior on interface-heavy surfaces: where a claimed behavior (rendering, interaction, visual state) is pinned by no runnable guard, the axis does not hunt for a mutation that nothing can catch and does not stand up servers or browsers to manufacture one — it records the guard gap itself as the finding and moves to the next enumerated question. Interface preview evidence belongs to the parent's validation gate under `completion-evidence.md`, not to a falsification loop.
+
 What makes a surviving-or-dying proof binding rather than decorative is governed by `evidence-binding.md`; this axis attacks whatever that reference says a proof must bind to.
 
 ### Falsification economics
@@ -54,7 +56,7 @@ Mutation review is the most tool-heavy review style: every mutation is a read-ed
 - **Each question ships with its focused check.** The brief names, per mutation question, the single test file (or narrowest command) that would go red, and requires filtered output — pass/fail lines and failure names only, never a full raw test log into context.
 - **Full suite once, at the end.** One whole-suite plus package-check run after the last revert confirms restoration; per-mutation loops use focused runs only.
 - **Fingerprint twice, not per cycle.** Seal verification happens at start and at final exit; re-hashing after every revert multiplies loops without adding evidence — the final hash already proves cumulative restoration.
-- **Report the table, not the journey.** The deliverable is the mutation record and dispositions; per-cycle narration re-spends every loop a second time in prose.
+- **Report the table, not the journey — and not a live feed.** The deliverable is the mutation record and dispositions, delivered once at the end. Findings are batched into that report, not streamed to the delegating agent one at a time as they surface: each mid-run escalation is a synchronous round-trip that stalls the review, and unvetted findings streamed before the reviewer's own pre-submit attack pass export noise the parent must then dispose. Mid-run contact is for a genuine stall — a seal problem, a broken fixed point, an exhausted budget — never per-finding narration.
 - **Budget the child.** The delegating agent bounds the run (tool or turn budget) sized to the enumerated battery, so a stuck loop fails fast instead of burning quietly.
 
 ## Axis B — Adversarial authority
