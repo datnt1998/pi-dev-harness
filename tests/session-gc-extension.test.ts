@@ -314,3 +314,67 @@ test("formatStatusText reports per-area child count and bytes over real fixture 
   assert.match(text, /project-artifacts/);
   assert.match(text, /1 item\(s\), 5 bytes/);
 });
+
+// --- Fix-round tests (review round deb44fc4: kill surviving mutations, pin symlink safety) ---
+
+import { symlink, readFile as readFileP } from "node:fs/promises";
+import { buildGcPlan } from "../lib/gc-core.ts";
+
+const FIXROUND_POLICY = { nowMs: Date.now(), sessionsDays: 30, artifactsDays: 7 };
+
+test("executeGcPlan with an empty plan reports the empty-plan short-circuit, not per-area lines", async () => {
+  const cwd = await freshScratchCwd();
+  const artifactsDir = join(cwd, ".pi-subagents", "artifacts");
+  await mkdir(join(artifactsDir, "fresh-run"), { recursive: true });
+  await writeFile(join(artifactsDir, "fresh-run", "log.txt"), "recent");
+  const areas: GcAreaInput[] = await gatherGcAreas(cwd);
+  const plan: GcPlan = buildGcPlan(areas, FIXROUND_POLICY);
+  assert.equal(plan.totalReclaimBytes, 0);
+  const report = await executeGcPlan(plan);
+  assert.match(report, /nothing to reclaim \(plan is empty\)/);
+  assert.doesNotMatch(report, /reclaimed \d+ bytes/);
+  assert.ok(existsSync(join(artifactsDir, "fresh-run", "log.txt")));
+});
+
+test("an old subagent run dir with no status.json is protected (unknown, fail closed) and survives run", async () => {
+  await withSandboxedSubagentTempRoot(async (root) => {
+    const runsDir = join(root, "async-subagent-runs");
+    const orphan = join(runsDir, "orphan-no-status");
+    await mkdir(orphan, { recursive: true });
+    await writeFile(join(orphan, "events.jsonl"), "{}");
+    await touchOld(join(orphan, "events.jsonl"), 40);
+    await touchOld(orphan, 40);
+    const cwd = await freshScratchCwd();
+    const areas = await gatherGcAreas(cwd);
+    const plan = buildGcPlan(areas, FIXROUND_POLICY);
+    const planned = plan.areas.flatMap((a) => a.candidates.map((c) => c.path));
+    assert.ok(!planned.includes(orphan), "orphan run without status.json must never be a candidate");
+    await executeGcPlan(plan);
+    assert.ok(existsSync(orphan), "orphan run without status.json must survive a run sweep");
+  });
+});
+
+test("deleting an old candidate dir unlinks internal symlinks without traversing into their targets", async () => {
+  const victim = await mkdtemp(join(tmpdir(), "session-gc-symlink-victim-"));
+  try {
+    await writeFile(join(victim, "precious.txt"), "must survive");
+    const cwd = await freshScratchCwd();
+    const artifactsDir = join(cwd, ".pi-subagents", "artifacts");
+    const oldRun = join(artifactsDir, "old-run-with-symlink");
+    await mkdir(oldRun, { recursive: true });
+    await writeFile(join(oldRun, "log.txt"), "old");
+    await symlink(victim, join(oldRun, "escape-link"));
+    await touchOld(join(oldRun, "log.txt"), 40);
+    await touchOld(oldRun, 40);
+    const areas = await gatherGcAreas(cwd);
+    const plan = buildGcPlan(areas, FIXROUND_POLICY);
+    const planned = plan.areas.flatMap((a) => a.candidates.map((c) => c.path));
+    assert.ok(planned.includes(oldRun), "old artifact dir should be a candidate");
+    const report = await executeGcPlan(plan);
+    assert.match(report, /reclaimed \d+ bytes/);
+    assert.ok(!existsSync(oldRun), "candidate dir should be removed");
+    assert.equal(await readFileP(join(victim, "precious.txt"), "utf8"), "must survive");
+  } finally {
+    await rm(victim, { recursive: true, force: true });
+  }
+});
