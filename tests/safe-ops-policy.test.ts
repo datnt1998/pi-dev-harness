@@ -55,6 +55,17 @@ test("recognizes destructive commands requiring confirmation", () => {
     "git -c advice.detachedHead=false reset --hard",
     "git -c \"advice.detachedHead=false\" reset --hard",
     "env FOO=\"bar baz\" rm -rf tmp",
+    "git checkout -- apps/api/src/file.ts",
+    "git checkout -- .",
+    "git -C /repo checkout HEAD -- src/a.ts src/b.ts",
+    "git checkout .",
+    "cd /repo && git checkout -- file.ts && echo restored",
+    "git restore file.ts",
+    "git restore --source=HEAD~1 file.ts",
+    "git restore --staged --worktree file.ts",
+    "git restore -W file.ts",
+    "git stash drop",
+    "git stash clear",
   ]) {
     assert.equal(isDestructiveCommand(command), true, command);
   }
@@ -68,6 +79,14 @@ test("recognizes destructive commands requiring confirmation", () => {
     "printf '%s\\n' '; rm -rf tmp'",
     "printf \"rm -rf is documentation\"",
     "rm safe && echo -rf",
+    "git checkout feature-branch",
+    "git checkout -b new-branch",
+    "git restore --staged file.ts",
+    "git stash",
+    "git stash push -m probe",
+    "git stash pop",
+    "git stash list",
+    "echo \"git checkout -- file\"",
   ]) {
     assert.equal(isDestructiveCommand(command), false, command);
   }

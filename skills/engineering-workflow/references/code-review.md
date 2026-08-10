@@ -35,7 +35,12 @@ Attack the guards. For each behavior the diff's tests or validation claim to pin
 - DIED carries the observed red; SURVIVED is stated plainly, never softened;
 - a red produced by a syntax error is not the needed red — the mutation must stay meaning-changing and executable as changed;
 - "this provably cannot go red" is a permitted result when the structural reason is named (e.g., the branch is unreachable, the value is structurally fixed);
-- fabricating a red or silently weakening a claim is a false claim, not a lesser finding.
+- fabricating a red or silently weakening a claim is a false claim, not a lesser finding;
+- a temporary probe is reverted by restoring the exact saved bytes captured before the probe
+  — never by ref-relative git commands (`checkout -- <path>`, `restore`, `reset`, `stash`).
+  Those restore to a committed state, and when the reviewed work is not itself committed they
+  erase it along with the probe. They are permissible only when the fixed point under review
+  is a commit that contains the reviewed work.
 
 "Mutation" means any meaning-changing alteration whose detection is claimed, not only a code mutation run through a test suite. For doc-only or otherwise non-executable surfaces, the falsification method degrades to deriving and stating a concrete counter-example the surface's own claim should have caught, and stating plainly whether the surface catches it.
 

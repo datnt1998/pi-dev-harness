@@ -149,5 +149,14 @@ export function isDestructiveCommand(command: string): boolean {
     new RegExp(`${boundary}${wrappers}git${gitOptions}\\s+reset\\b(?=${beforeNext}\\s--hard\\b)`, "i"),
     new RegExp(`${boundary}${wrappers}git${gitOptions}\\s+clean\\b(?=${beforeNext}(?:\\s--force\\b|\\s-[a-z]*f[a-z]*\\b))`, "i"),
     new RegExp(`${boundary}${wrappers}git${gitOptions}\\s+push\\b(?=${beforeNext}(?:\\s--force(?:-with-lease)?\\b|\\s-f\\b))`, "i"),
+    // Worktree-overwriting restores: on a dirty tree these erase uncommitted work.
+    // `git checkout` with a pathspec separator or a bare `.` pathspec restores files from HEAD/a ref.
+    new RegExp(`${boundary}${wrappers}git${gitOptions}\\s+checkout\\b(?=${beforeNext}\\s--(?:\\s|$))`, "i"),
+    new RegExp(`${boundary}${wrappers}git${gitOptions}\\s+checkout\\s+\\.(?=\\s|$)`, "i"),
+    // `git restore` overwrites the worktree unless the segment is a pure `--staged` unstage.
+    new RegExp(`${boundary}${wrappers}git${gitOptions}\\s+restore\\b(?!${beforeNext}\\s--staged\\b)`, "i"),
+    new RegExp(`${boundary}${wrappers}git${gitOptions}\\s+restore\\b(?=${beforeNext}\\s(?:--worktree|-W)\\b)`, "i"),
+    // Stash destruction discards saved uncommitted work permanently.
+    new RegExp(`${boundary}${wrappers}git${gitOptions}\\s+stash\\s+(?:drop|clear)\\b`, "i"),
   ].some((pattern) => pattern.test(source));
 }
