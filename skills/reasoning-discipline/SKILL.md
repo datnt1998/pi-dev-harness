@@ -14,33 +14,6 @@ regardless of which model or runtime is executing. When instinct conflicts with 
 here, the rule wins. The Floor runs before every answer with no exceptions — casual,
 simple-looking questions included; those are exactly where confident wrong answers live.
 
-## Known Failure Modes
-
-Naming these is the first countermeasure:
-
-- **Pattern-match satisfaction** — the first explanation that fits a familiar template
-  feels like the diagnosis. Familiarity is retrieval, not verification. Countered by REASON.
-- **Template hijack** — a question whose surface matches a stored template ("flaky test →
-  add retry") fires the template's answer before this question's actual constraints are
-  read. Familiarity raises the risk rather than lowering it. Countered by the Floor.
-- **Fluent ≠ true** — well-formed prose feels more correct as it flows; confidence rises
-  with token count, not with evidence. Countered by DELIVER.
-- **Prior-as-fact** — training/background knowledge gets stated in the grammar of observed
-  fact. Priors decay: APIs change, versions move, prices update, docs rot. Countered by
-  Claim Discipline.
-- **Confirmation seeking** — once a favorite hypothesis exists, tests get picked that it
-  will pass. Countered by the discriminating-test rule in REASON.
-- **Frame adoption** — the asker's framing ("the cache is broken again") gets inherited as
-  fact. The asker is a witness, not an oracle: trust the goal, verify the diagnosis.
-  Countered by FRAME and GROUND.
-- **Completion pressure** — producing something answer-shaped now feels better than
-  checking one more thing. An answer-shaped non-answer is worse than "verified X; still
-  open: Y". Countered by the Self-Review Gate.
-- **Surface blindness** — output gets produced and read as tokens, not characters. Any
-  claim about the surface form of the output — which symbols it contains, how many units,
-  whether a pattern holds — is a guess unless verified unit by unit or by tool; re-reading
-  always reports a pass. The most natural wording for a topic is often the likeliest
-  violator of a surface constraint. Countered by the Constraint Loop.
 
 ## The Floor (never skipped)
 
@@ -92,41 +65,12 @@ itself a calibration failure.
 | **Full** | High stakes, irreversible, unfamiliar, or contested (production incident, architecture, security, money, data migration) | All five moves written out; ATTACK is mandatory before delivery. |
 
 Feeling familiar is not evidence of being simple — familiar-looking questions are where
-template hijack lives. A tripped Floor check reclassifies the question out of Direct on
-the spot. So does a mechanically checkable output constraint (banned tokens, exact
-counts, positional patterns, strict formats): that class of task is never Direct, however
-short the ask — run the Constraint Loop.
+template hijack (`references/failure-modes.md`) lives. A tripped Floor check
+reclassifies the question out of Direct on the spot. So does a mechanically checkable
+output constraint (banned tokens, exact counts, positional patterns, strict formats):
+that class of task is never Direct, however short the ask — load
+`references/constraint-loop.md` and run its procedure before drafting a single sentence.
 
-## The Constraint Loop (mechanically checkable output — never Direct)
-
-Some asks place a mechanically checkable constraint on the output's surface form rather
-than its meaning: forbidden or required tokens, exact counts of words/sentences/units,
-positional patterns, length or format rules. These look trivial and are the opposite:
-generation is meaning-first and self-review reads the output as tokens, so the constraint
-sits exactly where perception is weakest. Treat the constraint — not the content — as the
-hard part of the task.
-
-1. **Expand the constraint before drafting.** Restate it as a mechanical test every
-   governed unit must pass. Enumerate the on-topic vocabulary most likely to violate it —
-   starting with the subject's own name, which the constraint may rule out — and choose
-   compliant substitutes before writing a single sentence. If the constraint governs
-   counts or positions, decide how to count before drafting.
-2. **Draft in reasoning space**, never directly into the final answer.
-3. **Verify mechanically.** If a tool, script, or search can run the check, run it — that
-   is the strongest evidence and costs seconds. Without one, decompose the text into the
-   units the constraint governs (spell each word symbol by symbol; count with an explicit
-   running index) and test every unit, one by one. Re-reading the draft and judging that
-   it passes is not verification; it is the exact blindness that produces the violation.
-4. **Repair and re-verify.** Replace each violating unit, then re-verify the replacement
-   and re-scan the full text — a fix can introduce a new violation. Loop until one
-   complete pass over the final text is clean.
-5. **Deliver the verified text verbatim.** Any post-verification rewording, however small,
-   invalidates the check — re-run step 3 if a single unit is touched.
-
-Claim Discipline applies with no exceptions: "the output satisfies the constraint" is
-OBSERVED only after step 3 has run on the exact delivered text. Asserted from re-reading,
-it is ASSUMED wearing OBSERVED grammar — a hallucination about the output, the most
-avoidable kind.
 
 ## The Five Moves
 
@@ -229,86 +173,9 @@ Rules:
   the authority for how a finished task's evidence record is shaped; this section governs
   how the underlying claims get typed as reasoning proceeds.
 
-## Altitude Control
 
-Problems and fixes live at four altitudes: **intent** (what is this for) → **design**
-(what shape solves it) → **implementation** (which lines) → **mechanics** (exact bytes,
-versions, environment).
 
-- Diagnose the altitude before fixing. The most common bad fix is a line-level patch for
-  a design-level fault; the second most common is redesigning what a one-line mechanical
-  fix solves.
-- When reasoning stalls at one altitude, deliberately move one level up or down. Errors
-  hide at altitude boundaries.
 
-## When Stuck
-
-Two or three failed attempts inside one framing means the framing is wrong — not that the
-effort was insufficient. Never repeat a failed probe harder. Change exactly one of:
-
-- **Altitude** — zoom out (what is this actually for?) or in (what are the exact bytes?).
-- **Direction** — invert: "what would have to be true for it to fail exactly this way?"
-  and work backwards from the failure.
-- **Ground** — stop reasoning; go collect the missing observation (a log, a minimal
-  reproduction, a bisect). For bug diagnosis specifically, `diagnosing-bugs.md` owns the
-  full ground-collection loop (feedback loop, minimize, instrument) — use its phases
-  rather than re-deriving them here.
-
-For an oversized or foggy exploration that outgrows a single stuck moment — a
-multi-session effort needing its own decision map — hand off to `/skill:wayfinder` rather
-than continuing to probe inside one framing.
-
-## Portable Techniques
-
-The moves say WHAT to check; these techniques are HOW to execute the checking. They need
-no special capability beyond reasoning itself, and they are the highest-leverage habits
-when an answer starts forming automatically:
-
-- **Step back first** — before answering the specific question, name the general
-  principle or problem class it is an instance of, then apply that principle to the
-  specifics. Deriving the abstraction first blocks the template answer that rides in on
-  surface details.
-- **Chain the thought, answer last** — reason in explicit numbered steps, each depending
-  on the previous, and state the conclusion only after the chain ends. Never emit the
-  answer first and justify it afterwards: post-hoc justification always succeeds, which
-  is exactly why it proves nothing.
-- **Restate before solving** — rewrite the question with every detail and constraint
-  included. A detail that will not fit in the restatement is either the trap or a
-  constraint about to be dropped. This is the Floor's Leftovers check run proactively.
-- **Derive twice, independently** — for any load-bearing conclusion, reach it a second
-  time by a different route: different starting point, inverted direction, different
-  method. Agreement is mild support; disagreement is a hard stop signal worth more than
-  either answer.
-- **Concretize** — replace abstractions with actual values and walk them through step by
-  step. "Looks right" in the abstract survives; it rarely survives one concrete trace.
-- **Invert** — assume the conclusion is wrong and ask what it would have had to miss.
-  Working backwards from imagined failure finds holes forward reasoning steps over.
-- **Treat instant answers as alarms** — an answer that arrived before the question
-  finished being read is retrieval, not reasoning. Demote it to a hypothesis and run the
-  Floor against it deliberately. Speed plus confidence is the signature of template
-  hijack, not of correctness.
-
-## Harness Leverage
-
-Portable techniques need only reasoning; most runtimes grant more. At the start of a
-task, take inventory of what the current environment actually grants — running commands,
-reading and writing files, fetching or searching documents, spawning subagents for
-isolated checks — and treat that inventory as the verification budget. Two rules govern
-its use:
-
-- **Anything a granted capability can check, it must check.** A claim that a script, a
-  compiler, a test run, or a search could settle in seconds is never settled by reasoning
-  alone. Manual unit-by-unit verification is the fallback for capability-poor
-  environments, not a substitute where a check is available.
-- **Checkable work runs as a loop, not a single pass.** Produce → verify with the
-  strongest available check → repair → re-verify, and keep looping until one complete
-  verification of the final artifact comes back clean — or the remaining uncertainty is
-  named explicitly in the delivery. One green check on the last edit says nothing about
-  its neighbors: re-verify the whole artifact, not just the change.
-
-Confidence earned this way compounds: every loop iteration converts an ASSUMED into an
-OBSERVED. Confidence without a loop behind it is the fluent-≠-true default wearing a
-harness it never used.
 
 ## Self-Review Gate (binary, before sending)
 
@@ -326,30 +193,13 @@ prompted the question survives it: if there is no act behind a YES, the answer i
 6. Is the weakest link stated in the delivery?
 7. Is anything in the output more confident than the evidence behind it? (Must be NO.)
 8. If the output carries a mechanically checkable constraint, did the exact delivered
-   text pass a character-by-character or tool verification — not a re-read? (Constraint
-   Loop step 3 on the final text, byte-identical to what is being sent.)
+   text pass a character-by-character or tool verification — not a re-read? (The
+   Constraint Loop's verify step on the final text, byte-identical to what is being
+   sent — `references/constraint-loop.md`.)
 
 Any NO: fix it before delivering, or state plainly which gate could not be satisfied and
 why.
 
-## Anti-Patterns
-
-| Don't | Because | Instead |
-|-------|---------|---------|
-| Diagnose by resemblance ("classic X") | Same symptom, different cause | Verify the mechanism chain |
-| Answer the template a question resembles | Familiar surface, different constraints | Run the Floor; account for leftover details |
-| State the goal using one of the options | The question's framing smuggled in as the goal | Goal = the task's object in its finished state, option-free |
-| End the follow-through at the first milestone | Arrived/sent/submitted is not the outcome | Run the movie to the frame where the goal is verified |
-| Test to confirm | Confirmation almost always succeeds | Test to discriminate hypotheses |
-| State priors as facts | Background knowledge decays | Type the claim; check if load-bearing |
-| Verify everything uniformly | Wastes budget on trivia | Load-bearing facts first |
-| Let confidence grow with effort | Effort is not evidence | Audit what moved it |
-| Retry the same probe harder | The framing is the problem | Change altitude, direction, or ground |
-| Bury the answer | The reader needs the outcome | First sentence = outcome |
-| Hedge what was verified | Uncertainty theater erodes trust | Calibrated grammar in both directions |
-| Fix adjacent problems unasked | Scope drift, review burden | One-sentence flag, no work |
-| Deliver answer-shaped non-answers | Worse than an honest gap | "Verified X; still open: Y" |
-| Certify text by re-reading it | Re-reading sees tokens, not characters — it always passes | Decompose into the governed units and test each, or run a tool check |
 
 ## Deference
 
@@ -366,7 +216,8 @@ own:
   claims; it does not redefine the record shape.
 - `engineering-workflow/references/diagnosing-bugs.md` owns the bug-diagnosis loop
   (feedback loop first, then reproduce/minimize, hypothesize, instrument, fix, regression
-  test). REASON and When Stuck cross-reference it rather than restating its phases.
+  test). REASON and the when-stuck protocol (`references/techniques.md`) cross-reference
+  it rather than restating its phases.
 - `make-interfaces-feel-better` owns the concrete UI craft rules (spacing, shadows,
   animation, typography). The design-taste reference in this skill covers only the
   reasoning and verification loop around design work and cross-links the craft skill
@@ -374,8 +225,18 @@ own:
 
 ## References
 
-Load by deliverable type, before drafting or reviewing:
+Load by deliverable type or situation, not at every skill load:
 
+- `references/constraint-loop.md` — the full procedure for mechanically checkable
+  output constraints. Load the moment such a constraint appears; the Proportionality
+  Gate owns the trigger (never Direct).
+- `references/techniques.md` — portable execution techniques, harness leverage,
+  altitude control, and the when-stuck protocol. Load when an answer starts forming
+  automatically, when reasoning stalls or repeats a failed probe, or when taking the
+  capability inventory at the start of a substantial task.
+- `references/failure-modes.md` — the named failure catalog and anti-pattern table
+  behind this protocol. Load in Full mode, when reviewing reasoning-heavy work, or when
+  a countermeasure's rationale is contested.
 - `references/worked-examples.md` — end-to-end traces (trick question, bug diagnosis,
   code review, metrics analysis) contrasting default reasoning with this protocol. Load
   to see the moves applied, or before first use in Full mode.
