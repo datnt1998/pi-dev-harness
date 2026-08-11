@@ -270,8 +270,28 @@ function isSourceExt(ext: string): boolean {
   return (SOURCE_EXTENSIONS as readonly string[]).includes(ext);
 }
 
+/**
+ * TypeScript ES-module specifiers may carry a `.js`/`.mjs`/`.cjs` suffix
+ * while the file on disk is the `.ts` counterpart. The remap is the standard
+ * compiler rule and is deterministic, so probing it is resolution, not
+ * guessing.
+ */
+const EMITTED_EXT_REMAP: ReadonlyArray<[string, readonly string[]]> = [
+  [".js", [".ts", ".tsx"]],
+  [".mjs", [".mts"]],
+  [".cjs", [".cts"]],
+];
+
 function probeFile(basePath: string, fileSet: ReadonlySet<string>): string | undefined {
   if (fileSet.has(basePath)) return basePath;
+  for (const [emitted, sources] of EMITTED_EXT_REMAP) {
+    if (!basePath.endsWith(emitted)) continue;
+    const stem = basePath.slice(0, -emitted.length);
+    for (const ext of sources) {
+      const candidate = `${stem}${ext}`;
+      if (fileSet.has(candidate)) return candidate;
+    }
+  }
   for (const ext of SOURCE_EXTENSIONS) {
     const candidate = `${basePath}${ext}`;
     if (fileSet.has(candidate)) return candidate;
@@ -330,7 +350,8 @@ export function resolveSpecifier(
     const explicitExt = posixExtname(specifier);
     if (explicitExt) {
       if (!isSourceExt(explicitExt)) return { kind: "external" };
-      return fileSet.has(basePath) ? { kind: "resolved", path: basePath } : { kind: "unresolved" };
+      const explicitResolved = probeFile(basePath, fileSet);
+      return explicitResolved ? { kind: "resolved", path: explicitResolved } : { kind: "unresolved" };
     }
     const resolved = probeFile(basePath, fileSet);
     return resolved ? { kind: "resolved", path: resolved } : { kind: "unresolved" };

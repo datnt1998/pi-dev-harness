@@ -46,7 +46,11 @@ changed files) — so a reviewer navigates by reading the map instead of re-deri
   the index), and a subpath probes under the package root. Bare specifiers with no
   `packageIndex` match resolve as external and produce no edge. tsconfig path aliases are out
   of scope; an unresolved relative or workspace specifier is recorded as unresolved, never
-  guessed.
+  guessed. Emitted-extension specifiers in TypeScript ES-module style (`./x.js`, `./x.mjs`,
+  `./x.cjs`) remap to their source counterparts (`.ts`/`.tsx`, `.mts`, `.cts`) when no
+  emitted file is tracked and the source file exists: the remap is the standard compiler
+  rule, so probing it is resolution, not guessing. A tracked emitted file wins over the
+  remap.
 - `buildReviewGraph(input)`: given changed files (with before/after content), all candidate
   repo files with their content, and the file index, produce per changed file: export delta
   (added/removed names), direct dependents, dependents-of-dependents (depth 2, capped and

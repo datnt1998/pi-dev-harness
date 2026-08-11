@@ -381,3 +381,16 @@ test("purity: the pure core imports no fs, child_process, or process.env", async
   const source = await readFile(new URL("../lib/review-graph.ts", import.meta.url), "utf8");
   assert.doesNotMatch(source, /['"]node:fs['"]|['"]fs['"]|['"]node:child_process['"]|['"]child_process['"]|process\.env/);
 });
+
+test("resolveSpecifier: emitted-extension specifiers (./x.js style) remap to the source file, never unresolved when the source exists", () => {
+  const fileIndex = ["src/app.ts", "src/view.tsx", "src/esm.mts", "src/cjs.cts"];
+  assert.deepEqual(resolveSpecifier("src/main.ts", "./app.js", fileIndex), { kind: "resolved", path: "src/app.ts" });
+  assert.deepEqual(resolveSpecifier("src/main.ts", "./view.js", fileIndex), { kind: "resolved", path: "src/view.tsx" });
+  assert.deepEqual(resolveSpecifier("src/main.ts", "./esm.mjs", fileIndex), { kind: "resolved", path: "src/esm.mts" });
+  assert.deepEqual(resolveSpecifier("src/main.ts", "./cjs.cjs", fileIndex), { kind: "resolved", path: "src/cjs.cts" });
+  // A real emitted .js on disk still wins over the remap.
+  const withJs = ["src/app.js", "src/app.ts"];
+  assert.deepEqual(resolveSpecifier("src/main.ts", "./app.js", withJs), { kind: "resolved", path: "src/app.js" });
+  // No source counterpart: still unresolved, never guessed.
+  assert.equal(resolveSpecifier("src/main.ts", "./ghost.js", fileIndex).kind, "unresolved");
+});
