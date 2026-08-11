@@ -299,3 +299,85 @@ test("formatReviewMap includes an unresolved-specifier section only when non-emp
   const graph = buildReviewGraph(graphInput({ changed, files, fileIndex: files.map((f) => f.path) }));
   assert.match(formatReviewMap(graph), /## Unresolved specifiers/);
 });
+
+// --- fix round: string masking, longest-match, guard depths, sorting, purity ---
+
+test("parseImports: import-shaped text inside single-line string literals produces no edge", () => {
+  const source = [
+    `const note = "import { x } from './ghost'";`,
+    `const other = 'export { y } from "./ghost2"';`,
+    `const req = "require('./ghost3')";`,
+    `const dyn = "import('./ghost4')";`,
+    `import { real } from "./real";`,
+  ].join("\n");
+  assert.deepEqual(parseImports(source), ["./real"]);
+});
+
+test("parseImports: statement-shaped imports inside template literals produce no edge", () => {
+  const source = ["const fixture = `", `import { g } from "./ghost";`, `export * from "./ghost5";`, "`;", `import "./real2";`].join("\n");
+  assert.deepEqual(parseImports(source), ["./real2"]);
+});
+
+test("parseExports: export-shaped text inside string and template literals produces no phantom exports", () => {
+  const source = [
+    "const fixture = `",
+    "export const phantom = 1;",
+    "export default phantom;",
+    "`;",
+    `const s = "export function ghostFn() {}";`,
+    "export const real = 2;",
+  ].join("\n");
+  const surface = parseExports(source);
+  assert.deepEqual(surface.named, ["real"]);
+  assert.equal(surface.hasDefault, false);
+});
+
+test("resolveSpecifier: overlapping workspace package names bind to the longest matching name", () => {
+  // Roots deliberately do not nest: a first-match binding through the shorter
+  // name would resolve to an existing file under the wrong root.
+  const fileIndex = ["packages/pkg/sub/util.ts", "packages/other/util.ts", "packages/other/src/index.ts"];
+  const packageIndex: PackageIndex = {
+    "@scope/pkg": { root: "packages/pkg" },
+    "@scope/pkg/sub": { root: "packages/other" },
+  };
+  const nested = resolveSpecifier("apps/a.ts", "@scope/pkg/sub/util", fileIndex, packageIndex);
+  assert.deepEqual(nested, { kind: "resolved", path: "packages/other/util.ts" });
+  const rootHit = resolveSpecifier("apps/a.ts", "@scope/pkg/sub", fileIndex, packageIndex);
+  assert.deepEqual(rootHit, { kind: "resolved", path: "packages/other/src/index.ts" });
+});
+
+test("buildReviewGraph: depth-2 guards are classified across .spec. and __tests__/ naming", () => {
+  const changed: ChangedFileEntry[] = [{ path: "src/core.ts", before: "", after: `export const core = 1;` }];
+  const files: RepoFileEntry[] = [
+    { path: "src/core.ts", content: `export const core = 1;` },
+    { path: "src/mid.ts", content: `import { core } from "./core";` },
+    { path: "src/mid.spec.ts", content: `import { core } from "./core";` },
+    { path: "__tests__/deep.ts", content: `import "../src/mid";` },
+  ];
+  const graph = buildReviewGraph(graphInput({ changed, files, fileIndex: files.map((f) => f.path) }));
+  const guards = graph.sections[0].guards.map((g) => `${g.path}@${g.depth}`).sort();
+  assert.deepEqual(guards, ["__tests__/deep.ts@2", "src/mid.spec.ts@1"]);
+});
+
+test("buildReviewGraph: multi-file sections are path-sorted and byte-identical across runs", () => {
+  const changed: ChangedFileEntry[] = [
+    { path: "src/zebra.ts", before: "", after: `export const z = 1;` },
+    { path: "src/alpha.ts", before: "", after: `export const a = 1;` },
+    { path: "src/mid.ts", before: "", after: `export const m = 1;` },
+  ];
+  const files: RepoFileEntry[] = changed.map((c) => ({ path: c.path, content: c.after ?? "" }));
+  const input = graphInput({ changed, files, fileIndex: files.map((f) => f.path) });
+  const first = formatReviewMap(buildReviewGraph(input));
+  const second = formatReviewMap(buildReviewGraph(input));
+  assert.equal(first, second);
+  assert.deepEqual(
+    buildReviewGraph(input).sections.map((s) => s.path),
+    ["src/alpha.ts", "src/mid.ts", "src/zebra.ts"],
+  );
+});
+
+test("purity: the pure core imports no fs, child_process, or process.env", async () => {
+  const { readFile } = await import("node:fs/promises");
+  const source = await readFile(new URL("../lib/review-graph.ts", import.meta.url), "utf8");
+  assert.doesNotMatch(source, /['"]node:fs['"]|['"]fs['"]|['"]node:child_process['"]|['"]child_process['"]|process\.env/);
+});

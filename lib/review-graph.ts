@@ -98,29 +98,77 @@ function stripComments(source: string): string {
   return out;
 }
 
+/**
+ * Index ranges (inclusive start, exclusive end) of string and template
+ * literals in comment-stripped source. Keyword matches whose index falls
+ * inside one of these ranges are literal text, not statements, and must
+ * not produce edges or export names.
+ */
+function stringRanges(text: string): Array<[number, number]> {
+  const ranges: Array<[number, number]> = [];
+  let i = 0;
+  const n = text.length;
+  while (i < n) {
+    const c = text[i];
+    if (c === "'" || c === '"' || c === "`") {
+      const quote = c;
+      const start = i;
+      i += 1;
+      while (i < n) {
+        if (text[i] === "\\") {
+          i += 2;
+          continue;
+        }
+        if (text[i] === quote) {
+          i += 1;
+          break;
+        }
+        if (quote !== "`" && text[i] === "\n") break;
+        i += 1;
+      }
+      ranges.push([start, i]);
+      continue;
+    }
+    i += 1;
+  }
+  return ranges;
+}
+
+function insideRanges(ranges: ReadonlyArray<[number, number]>, index: number): boolean {
+  for (const [start, end] of ranges) {
+    if (index >= start && index < end) return true;
+    if (start > index) break;
+  }
+  return false;
+}
+
 // --- R1: parseImports ---
 
-const IMPORT_FROM_RE = /\bimport\b(?!\s*\()[^'"]*?\bfrom\s*(['"])([^'"]+)\1/g;
+const IMPORT_FROM_RE = /\bimport\b(?!\s*\()[^'"`]*?\bfrom\s*(['"])([^'"]+)\1/g;
 const IMPORT_BARE_RE = /\bimport\s*(['"])([^'"]+)\1/g;
-const EXPORT_FROM_RE = /\bexport\b[^'"]*?\bfrom\s*(['"])([^'"]+)\1/g;
+const EXPORT_FROM_RE = /\bexport\b[^'"`]*?\bfrom\s*(['"])([^'"]+)\1/g;
 const REQUIRE_RE = /\brequire\s*\(\s*(['"])([^'"]+)\1\s*\)/g;
 const DYNAMIC_IMPORT_RE = /\bimport\s*\(\s*(['"])([^'"]+)\1\s*\)/g;
 
 /**
  * Extract import/require/export-from/dynamic-import specifiers from source
- * text without executing it. Comments are stripped first; a string literal
- * that merely mentions "import" without forming a real import/export/
- * require statement produces no edge (R1).
+ * text without executing it. Comments are stripped first, then keyword
+ * matches that start inside a string or template literal are rejected: a
+ * literal containing import-shaped text produces no edge (R1).
  */
 export function parseImports(source: string): string[] {
   const stripped = stripComments(source);
+  const ranges = stringRanges(stripped);
   const seen: string[] = [];
   const add = (specifier: string) => {
     if (!seen.includes(specifier)) seen.push(specifier);
   };
   for (const re of [IMPORT_FROM_RE, IMPORT_BARE_RE, EXPORT_FROM_RE, REQUIRE_RE, DYNAMIC_IMPORT_RE]) {
     re.lastIndex = 0;
-    for (const match of stripped.matchAll(re)) add(match[2]);
+    for (const match of stripped.matchAll(re)) {
+      if (insideRanges(ranges, match.index ?? 0)) continue;
+      add(match[2]);
+    }
   }
   return seen;
 }
@@ -161,6 +209,7 @@ function parseSpecifierList(list: string): string[] {
  */
 export function parseExports(source: string): ExportSurface {
   const stripped = stripComments(source);
+  const ranges = stringRanges(stripped);
   const named: string[] = [];
   const reExported: string[] = [];
   const addNamed = (name: string) => {
@@ -171,10 +220,14 @@ export function parseExports(source: string): ExportSurface {
   };
 
   NAMED_DECL_RE.lastIndex = 0;
-  for (const match of stripped.matchAll(NAMED_DECL_RE)) addNamed(match[1]);
+  for (const match of stripped.matchAll(NAMED_DECL_RE)) {
+    if (insideRanges(ranges, match.index ?? 0)) continue;
+    addNamed(match[1]);
+  }
 
   BRACE_EXPORT_RE.lastIndex = 0;
   for (const match of stripped.matchAll(BRACE_EXPORT_RE)) {
+    if (insideRanges(ranges, match.index ?? 0)) continue;
     const names = parseSpecifierList(match[1]);
     if (match[2] !== undefined) names.forEach(addReExported);
     else names.forEach(addNamed);
@@ -182,10 +235,19 @@ export function parseExports(source: string): ExportSurface {
 
   STAR_REEXPORT_RE.lastIndex = 0;
   for (const match of stripped.matchAll(STAR_REEXPORT_RE)) {
+    if (insideRanges(ranges, match.index ?? 0)) continue;
     if (match[1]) addReExported(match[1]);
   }
 
-  return { named, reExported, hasDefault: DEFAULT_RE.test(stripped) };
+  let hasDefault = false;
+  const defaultRe = new RegExp(DEFAULT_RE.source, "g");
+  for (const match of stripped.matchAll(defaultRe)) {
+    if (insideRanges(ranges, match.index ?? 0)) continue;
+    hasDefault = true;
+    break;
+  }
+
+  return { named, reExported, hasDefault };
 }
 
 // --- R1: resolveSpecifier ---
@@ -240,9 +302,10 @@ function probePackageRoot(entry: PackageIndexEntry, fileSet: ReadonlySet<string>
 function matchPackage(specifier: string, packageIndex: PackageIndex): { entry: PackageIndexEntry; subpath?: string } | undefined {
   const direct = packageIndex[specifier];
   if (direct) return { entry: direct };
-  for (const [name, entry] of Object.entries(packageIndex)) {
+  const names = Object.keys(packageIndex).sort((a, b) => b.length - a.length);
+  for (const name of names) {
     const prefix = `${name}/`;
-    if (specifier.startsWith(prefix)) return { entry, subpath: specifier.slice(prefix.length) };
+    if (specifier.startsWith(prefix)) return { entry: packageIndex[name], subpath: specifier.slice(prefix.length) };
   }
   return undefined;
 }

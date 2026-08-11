@@ -49,7 +49,7 @@ function makeFakePi() {
   const commands: Record<string, { handler: (args: string, ctx: unknown) => Promise<unknown> }> = {};
   const pi = {
     on() {},
-    registerCommand(name: string, def: { handler: (args: string, ctx: unknown) => Promise<unknown> }) {
+    registerCommand(name: string, def: { description?: string; handler: (args: string, ctx: unknown) => Promise<unknown> }) {
       commands[name] = def;
     },
   };
@@ -301,6 +301,90 @@ test("/review-map command handler prints the map for a live ctx", async () => {
     const text = notes.join("\n");
     assert.match(text, /# Review map/);
     assert.match(text, /src\/util\.ts/);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+// --- fix round: registration help text, manifest hints, malformed listing, unreadable files ---
+
+test("command registration carries a non-empty description and exported help text stays consistent", async () => {
+  const { default: reviewGraph, REVIEW_MAP_HELP_TEXT } = await import("../extensions/review-graph.ts");
+  const { pi, commands } = makeFakePi();
+  reviewGraph(pi as never);
+  const def = commands["review-map"] as { description?: string };
+  assert.ok(def, "command registered");
+  assert.ok((def.description ?? "").length > 0, "description present");
+  assert.match(REVIEW_MAP_HELP_TEXT, /review-map/);
+  assert.match(REVIEW_MAP_HELP_TEXT, /base\.\.head/);
+});
+
+test("gatherPackageIndex ingests name plus main/module hints from tracked manifests", async () => {
+  const dir = await initFixtureRepo();
+  try {
+    await writeAndCommit(
+      dir,
+      {
+        "packages/a/package.json": JSON.stringify({ name: "@fx/a", main: "dist/main.js", module: "src/index.ts" }),
+        "packages/a/src/index.ts": "export const a = 1;",
+      },
+      "manifests",
+    );
+    const { packageIndex, malformed } = await gatherPackageIndex(dir);
+    assert.deepEqual(malformed, []);
+    assert.equal(packageIndex["@fx/a"].root, "packages/a");
+    assert.equal(packageIndex["@fx/a"].main, "dist/main.js");
+    assert.equal(packageIndex["@fx/a"].module, "src/index.ts");
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test("a malformed manifest is listed in the printed map, never fatal", async () => {
+  const dir = await initFixtureRepo();
+  try {
+    await writeAndCommit(
+      dir,
+      {
+        "packages/bad/package.json": "{ not json",
+        "src/x.ts": "export const x = 1;",
+      },
+      "base",
+    );
+    await writeFile(join(dir, "src", "x.ts"), "export const x = 2;");
+    const text = await buildReviewMapText(dir, "");
+    assert.match(text, /Malformed package manifests/);
+    assert.match(text, /packages\/bad\/package\.json/);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test("an unreadable candidate file degrades to the skipped list, never a throw", async (t) => {
+  if (typeof process.getuid === "function" && process.getuid() === 0) {
+    t.skip("running as root; chmod 000 stays readable");
+    return;
+  }
+  const dir = await initFixtureRepo();
+  try {
+    await writeAndCommit(
+      dir,
+      {
+        "src/x.ts": "export const x = 1;",
+        "src/locked.ts": "export const locked = 1;",
+      },
+      "base",
+    );
+    const { chmod } = await import("node:fs/promises");
+    await chmod(join(dir, "src", "locked.ts"), 0);
+    await writeFile(join(dir, "src", "x.ts"), "export const x = 2;");
+    try {
+      const text = await buildReviewMapText(dir, "");
+      assert.match(text, /Skipped files/);
+      assert.match(text, /src\/locked\.ts/);
+    } finally {
+      await chmod(join(dir, "src", "locked.ts"), 0o644);
+    }
   } finally {
     await rm(dir, { recursive: true, force: true });
   }

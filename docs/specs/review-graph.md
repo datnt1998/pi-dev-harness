@@ -32,8 +32,9 @@ changed files) — so a reviewer navigates by reading the map instead of re-deri
 
 - `parseImports(source)`: extract import/require/export-from/dynamic-import specifiers from
   a source text without executing it. Comments and string literals containing import-like
-  text must not produce false edges (line-comment and block-comment stripping is enough;
-  perfection is not required, determinism is).
+  text must not produce false edges: comments are stripped and keyword matches that start
+  inside a string or template literal are rejected (perfection is not required, determinism
+  is).
 - `parseExports(source)`: extract the named export surface (exported const/function/class/
   type/interface/enum names, re-exports, presence of a default export).
 - `resolveSpecifier(fromPath, specifier, fileIndex, packageIndex)`: resolve a relative
@@ -68,12 +69,14 @@ changed files) — so a reviewer navigates by reading the map instead of re-deri
   that keeps scanning subprocess-free and matches what a reviewer will read, with the
   commit-at-boundary review rule making tree and head coincide at review time.
 - Candidate importers come from `git ls-files` filtered to source extensions; before-content
-  for export deltas from `git show <base>:<path>` when a range is given, index/HEAD otherwise.
+  for export deltas from `git show <base>:<path>` when a range is given, the HEAD version
+  otherwise.
 - The workspace package index is gathered by reading each tracked `package.json`'s `name`
   (and `main`/`module` when present) — no workspace tool is invoked; a malformed manifest is
   skipped and listed, never fatal.
 - Non-git directories, empty change sets, and unreadable files degrade to a clear message,
-  never a throw. Files larger than a fixed guard size are skipped and listed as skipped.
+  never a throw. Files larger than the guard size (512 KiB, an exported constant) are
+  skipped and listed as skipped.
 - Output: print the map, and offer the same text for brief-planting (the printed block is
   copy-ready; no clipboard integration).
 
