@@ -1,6 +1,6 @@
 {
   "name": "pi-dev-harness",
-  "version": "0.16.1",
+  "version": "0.16.2",
   "description": "Reusable Pi engineering harness with autonomous workflow, safety guardrails, skills, prompts, and ticket-runner tools.",
   "license": "MIT",
   "type": "module",
