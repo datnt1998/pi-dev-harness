@@ -10,6 +10,8 @@ A proof binds to the implementation, never to a copy of it. Artifact text a proo
 
 The test of a proof is a mutation of the implementation: change what the proof names and watch the proof die. A proof that survives a meaning-changing mutation of the thing it claims to check was never bound to it.
 
+A proof routed through an unfaithful test double binds to the double, not the implementation; the semantic-fidelity rules for doubles live in `tests-and-mocking.md`.
+
 ## Expected values come from authority
 
 Expected values come from authority, never pasted back from the code's own output. A figure is either quoted from an authority (with citation) or derived from a named rule and labeled as such; neither may pretend to be the other.

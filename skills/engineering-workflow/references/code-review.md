@@ -46,7 +46,7 @@ Attack the guards. For each behavior the diff's tests or validation claim to pin
 
 The same degradation applies per behavior on interface-heavy surfaces: where a claimed behavior (rendering, interaction, visual state) is pinned by no runnable guard, the axis does not hunt for a mutation that nothing can catch and does not stand up servers or browsers to manufacture one — it records the guard gap itself as the finding and moves to the next enumerated question. Interface preview evidence belongs to the parent's validation gate under `completion-evidence.md`, not to a falsification loop.
 
-What makes a surviving-or-dying proof binding rather than decorative is governed by `evidence-binding.md`; this axis attacks whatever that reference says a proof must bind to.
+What makes a surviving-or-dying proof binding rather than decorative is governed by `evidence-binding.md`; this axis attacks whatever that reference says a proof must bind to. When the diff touches a test double standing in for an argument-sensitive or refusing operation, the axis enumerates each double/port semantic divergence and states what turns red when the divergence is removed (`tests-and-mocking.md`, semantic fidelity).
 
 ### Falsification economics
 

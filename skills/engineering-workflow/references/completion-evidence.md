@@ -21,6 +21,7 @@ Git: <status; proposed/made commit>
 ## Rules
 
 - Evidence entered under `Acceptance` must be binding per `evidence-binding.md`, not a copy of the thing it claims to check.
+- A fidelity-driven red follows the monotonic-fidelity rule in `tests-and-mocking.md` (semantic fidelity of test doubles); acceptance evidence obtained through a weakened double is not evidence.
 - Preserve failures; never summarize red checks as success.
 - Separate automated evidence, manual evidence, and assumptions.
 - Review does not replace validation; validation does not replace review.
