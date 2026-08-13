@@ -785,7 +785,7 @@ test("CLI plan + blind + score round-trip exits 0 on the packaged full catalog",
   assert.equal(summary.release.decision, "pass");
   // 5 oracle cases x 2 conditions machine-verified on the full catalog
   assert.equal(summary.evidence.machine_verified, 10);
-  assert.equal(summary.evidence.prose_only, 22);
+  assert.equal(summary.evidence.prose_only, 28);
   assert.deepEqual(summary.judge, judgeRecord);
   assert.equal(summary.checks.samples, "matched");
 

@@ -116,6 +116,20 @@ The harness runs alone, but highest-effectiveness review/research on the current
 
 Install only needed, reviewed packages with exact versions; provider/auth packages are environment-specific. These are companions, not bundled dependencies, so `pi-dev-harness` remains useful in isolation and uses documented fallbacks.
 
+## Test-double fidelity contract
+
+Three normative rules against rubber-stamp fakes, with their single authority in
+`skills/engineering-workflow/references/tests-and-mocking.md` ("Semantic fidelity of test
+doubles"): a semantic argument must be observed by the double (a no-op passthrough proves
+nothing), a double standing in for a refusing operation must reproduce at least one declared
+refusal path or declare tier blindness naming its covering guard, and a red produced by
+increasing a double's fidelity is an implementation defect — never a reason to weaken the
+double back to green. `lib/test-double-fidelity.ts` makes the claims executable as a
+fail-closed `DoubleFidelityPacket` (distinguishing/refusal/echo/restoration probes with
+replay commands and observed outcomes), validated by `validateDoubleFidelityPacket` and
+summarized per operation by `summarizeDoubleFidelity`. Spec:
+`docs/specs/test-double-fidelity.md`.
+
 ## Validate
 
 ```bash
@@ -129,7 +143,7 @@ The installed smoke loads Pi twice: package-only in a temporary unrelated projec
 
 ## Response-quality evals
 
-`evals/response-quality/` ships a blind, paired judge-and-score harness for user-facing response quality: 16 harness-specific cases (no trivia, no answer-leaking prompts), a weighted rubric (correctness 35 / autonomy 25 / actionability 20 / safety 10 / concision 10), and a lexicographic release gate: zero blockers; a machine-evidence gate for oracle cases; candidate correctness, safety, and autonomy may not regress at all; weighted score must strictly improve; mean assistant tokens may grow at most 10%. `plan` writes a content-hashed manifest (exact case/trial/condition rows including audit rows, per-case oracles, catalog/rubric digests); `blind` and `score` require it and enforce an exact bijection among manifest, responses, key, and judgments. Provenance splits honestly: a shared `environment_hash` (provider, model, effective reasoning level, runner/CLI version, isolated config) must match across conditions, while package treatment provenance (ref, commit SHA, package content digest) must differ — equal package digests are a structural error, not a warning.
+`evals/response-quality/` ships a blind, paired judge-and-score harness for user-facing response quality: 19 harness-specific cases (no trivia, no answer-leaking prompts), a weighted rubric (correctness 35 / autonomy 25 / actionability 20 / safety 10 / concision 10), and a lexicographic release gate: zero blockers; a machine-evidence gate for oracle cases; candidate correctness, safety, and autonomy may not regress at all; weighted score must strictly improve; mean assistant tokens may grow at most 10%. `plan` writes a content-hashed manifest (exact case/trial/condition rows including audit rows, per-case oracles, catalog/rubric digests); `blind` and `score` require it and enforce an exact bijection among manifest, responses, key, and judgments. Provenance splits honestly: a shared `environment_hash` (provider, model, effective reasoning level, runner/CLI version, isolated config) must match across conditions, while package treatment provenance (ref, commit SHA, package content digest) must differ — equal package digests are a structural error, not a warning.
 
 `scripts/response-evals.mjs` provides `validate`, `plan`, `blind`, and `score` only. It never calls a provider and ships no runner: response rows and recorded machine evidence are produced through the actual packaged activation path (disposable tool-enabled repos, pinned provider/model/reasoning/CLI/package, isolated Pi home, quota preflight, public audit cases) documented in `evals/response-quality/README.md`, judged blind against cryptographically random, shuffled sample ids, then gated by `score` (exit 0 pass, 1 gate fail, 2 structural error — always machine-readable JSON, for every command). The release path is pinned to the packaged full catalog and rubric: a subset or custom catalog cannot produce a releasable pass. `score` requires the judged samples file (each row digest-bound, rebound to the key and recorded responses) and a judge-provenance record (provider/model/reasoning/runner/version, prompt digest, rubric digest) recorded in the summary. Cases that claim observable behavior declare a small execution oracle (expected/forbidden changed files, forbidden-call patterns matched against recorded commands, gate command) verified from recorded evidence — candidate oracle failures gate the release, baseline oracle results are comparison data; cases without an oracle are prose-only, and the score summary reports both counts — prose scores are never claimed as verified behavior. The treatment is proven active, not merely installed: each condition copies its packaged `templates/APPEND_SYSTEM.md` into the disposable consumer's `.pi/APPEND_SYSTEM.md`, reloads, verifies byte equality, and records an `activation_digest` that `score` requires to differ across conditions (package install alone cannot write `.pi/APPEND_SYSTEM.md`, so it does not activate the always-loaded overlay). Release status: a release that changes the runtime overlay in `templates/APPEND_SYSTEM.md` treats those changed bytes as a **candidate treatment** and must not be tagged/published until a real paired baseline-vs-candidate run of this evaluation has passed `score` end-to-end. No such run exists yet for a new overlay candidate. Releases that leave the overlay byte-identical to the previous tag are outside this treatment gate.
 
