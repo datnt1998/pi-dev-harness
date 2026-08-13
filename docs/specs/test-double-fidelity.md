@@ -1,7 +1,7 @@
 <!-- pi-harness-attribution:v1 {"source":"conversation","purpose":"production"} -->
 # Test-double fidelity: an executable contract against rubber-stamp fakes
 
-Status: draft
+Status: implemented (T1–T3, unreleased); packet API pending pilot per Open questions
 Owner: harness maintainer
 
 ## Problem
