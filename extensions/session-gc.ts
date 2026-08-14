@@ -28,6 +28,7 @@ import { readFile, writeFile, readdir, lstat, rm, stat } from "node:fs/promises"
 import type { Dirent } from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import { basename, dirname, extname, join, normalize, resolve } from "node:path";
+import { loadJsonSettings, rejectUnknownFields } from "../lib/config-load.ts";
 import { safeCtx, safeCtxAsync } from "../lib/autocompact-core.ts";
 import {
   buildGcPlan,
@@ -86,6 +87,7 @@ function projectSettingsPath(cwd: string): string {
 }
 
 async function readSettingsFile(path: string): Promise<unknown | undefined> {
+  // Migrated to loadJsonSettings below; kept for non-settings reads.
   try {
     return JSON.parse(await readFile(path, "utf8"));
   } catch {
@@ -393,13 +395,16 @@ export default function sessionGc(pi: ExtensionAPI) {
   const state: SessionGcState = { settings: { ...DEFAULT_SESSION_GC_SETTINGS } };
 
   async function loadSettings(cwd: string): Promise<void> {
-    const projectRaw = await readSettingsFile(projectSettingsPath(cwd));
-    if (projectRaw !== undefined) {
-      state.settings = normalizeSessionGcSettings(projectRaw);
+    const validator = (raw: Record<string, unknown>) => {
+      rejectUnknownFields(["sessionsDays", "artifactsDays", "auto", "lastSweepMs"])(raw, "session-gc");
+      return normalizeSessionGcSettings(raw);
+    };
+    const project = loadJsonSettings({ path: projectSettingsPath(cwd), label: "session-gc", validate: validator, defaults: undefined as SessionGcSettings | undefined });
+    if (project !== undefined) {
+      state.settings = project;
       return;
     }
-    const globalRaw = await readSettingsFile(globalSettingsPath());
-    state.settings = globalRaw !== undefined ? normalizeSessionGcSettings(globalRaw) : { ...DEFAULT_SESSION_GC_SETTINGS };
+    state.settings = loadJsonSettings({ path: globalSettingsPath(), label: "session-gc", validate: validator, defaults: { ...DEFAULT_SESSION_GC_SETTINGS } });
   }
 
   async function persistSettings(ctx: ExtensionContext): Promise<void> {

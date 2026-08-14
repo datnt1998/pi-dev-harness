@@ -9,6 +9,7 @@
 import { readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
+import { loadJsonSettings, rejectUnknownFields } from "./config-load.ts";
 import { parseClaudeUsage, parseCodexUsage, type UsageState } from "./provider-usage-core.ts";
 
 export const USAGE_PROVIDERS = new Set(["anthropic", "openai-codex"]);
@@ -21,15 +22,20 @@ export type QuotaTarget = { provider: string; providerIdentity: string };
  * `{ "provider": "...", "providerIdentity": "optional-stable-account-key" }`.
  */
 export function resolveQuotaTarget(cwd: string, fallbackProvider?: string): QuotaTarget | null {
-  let configuredProvider: string | undefined;
-  let configuredIdentity: string | undefined;
-  try {
-    const raw = JSON.parse(readFileSync(join(cwd, ".pi", "quota-gate.json"), "utf8")) as { provider?: unknown; providerIdentity?: unknown };
-    if (typeof raw.provider === "string") configuredProvider = raw.provider;
-    if (typeof raw.providerIdentity === "string" && raw.providerIdentity.trim()) configuredIdentity = raw.providerIdentity.trim();
-  } catch {
-    // Optional configuration. UI-only fallback is frozen at session start.
-  }
+  const configured = loadJsonSettings({
+    path: join(cwd, ".pi", "quota-gate.json"),
+    label: "quota-gate",
+    validate: (raw) => {
+      rejectUnknownFields(["provider", "providerIdentity"])(raw, "quota-gate");
+      return {
+        provider: typeof raw.provider === "string" ? raw.provider : undefined,
+        providerIdentity: typeof raw.providerIdentity === "string" && raw.providerIdentity.trim() ? raw.providerIdentity.trim() : undefined,
+      };
+    },
+    defaults: {} as { provider?: string; providerIdentity?: string },
+  });
+  const configuredProvider = configured.provider;
+  const configuredIdentity = configured.providerIdentity;
   const provider = configuredProvider ?? fallbackProvider;
   if (!provider || !USAGE_PROVIDERS.has(provider)) return null;
   if (configuredIdentity) return { provider, providerIdentity: configuredIdentity };

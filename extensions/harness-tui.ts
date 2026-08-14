@@ -21,6 +21,7 @@ import { truncateToWidth, visibleWidth } from "@earendil-works/pi-tui";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { basename, join } from "node:path";
 import { homedir } from "node:os";
+import { loadJsonSettings, rejectUnknownFields } from "../lib/config-load.ts";
 import { contextSeverity, formatContextLabel, formatSessionCost, getFooterLayout, shortenPath } from "../lib/tui-core.ts";
 import { formatQuotaSnapshotThemed } from "../lib/provider-usage-core.ts";
 import { defaultQuotaLedgerPath, fetchUsage, resolveQuotaTarget } from "../lib/provider-usage-fetch.ts";
@@ -37,16 +38,19 @@ function configPath(cwd: string): string {
 }
 
 function loadSettings(cwd: string): Settings {
-  try {
-    const raw = JSON.parse(readFileSync(configPath(cwd), "utf8")) as Partial<Settings>;
-    return {
-      enabled: typeof raw.enabled === "boolean" ? raw.enabled : DEFAULTS.enabled,
-      showUsage: typeof raw.showUsage === "boolean" ? raw.showUsage : DEFAULTS.showUsage,
-      label: typeof raw.label === "string" && raw.label.trim() ? raw.label.trim() : undefined,
-    };
-  } catch {
-    return { ...DEFAULTS };
-  }
+  return loadJsonSettings({
+    path: configPath(cwd),
+    label: "harness-tui",
+    validate: (raw) => {
+      rejectUnknownFields(["enabled", "showUsage", "label"])(raw, "harness-tui");
+      return {
+        enabled: typeof raw.enabled === "boolean" ? raw.enabled : DEFAULTS.enabled,
+        showUsage: typeof raw.showUsage === "boolean" ? raw.showUsage : DEFAULTS.showUsage,
+        label: typeof raw.label === "string" && raw.label.trim() ? raw.label.trim() : undefined,
+      };
+    },
+    defaults: { ...DEFAULTS },
+  });
 }
 
 function sessionCost(ctx: ExtensionContext): number {
@@ -167,7 +171,13 @@ export default function harnessTui(pi: ExtensionAPI) {
   }
 
   pi.on("session_start", async (_event, ctx) => {
-    state.settings = loadSettings(ctx.cwd);
+    try {
+      state.settings = loadSettings(ctx.cwd);
+    } catch (err) {
+      console.error(err instanceof Error ? err.message : String(err));
+      state.settings = { ...DEFAULTS, enabled: false };
+      return;
+    }
     state.thinking = pi.getThinkingLevel();
     state.running = false;
     await refreshBranch(ctx.cwd);

@@ -41,6 +41,7 @@ import type {
 import { readFile, stat, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
+import { loadJsonSettings, rejectUnknownFields } from "../lib/config-load.ts";
 import {
   type ActivityObservations,
   AUTOCOMPACT_HELP_TEXT,
@@ -147,14 +148,17 @@ export default function autocompact(pi: ExtensionAPI) {
   };
 
   async function loadSettings(cwd: string): Promise<void> {
+    const validator = (raw: Record<string, unknown>) => {
+      rejectUnknownFields(["enabled", "triggerPercent", "warnPercent", "triggerTokens", "focus", "reorient", "syncNativeReserve"])(raw, "autocompact");
+      return normalizeAutoCompactSettings(raw);
+    };
     // Project override wins entirely; otherwise global; otherwise defaults.
-    const projectRaw = await readSettingsFile(projectSettingsPath(cwd));
-    if (projectRaw !== undefined) {
-      state.settings = normalizeAutoCompactSettings(projectRaw);
+    const project = loadJsonSettings({ path: projectSettingsPath(cwd), label: "autocompact", validate: validator, defaults: undefined as AutoCompactSettings | undefined });
+    if (project !== undefined) {
+      state.settings = project;
       return;
     }
-    const globalRaw = await readSettingsFile(GLOBAL_SETTINGS_PATH);
-    state.settings = globalRaw !== undefined ? normalizeAutoCompactSettings(globalRaw) : { ...DEFAULT_AUTOCOMPACT_SETTINGS };
+    state.settings = loadJsonSettings({ path: GLOBAL_SETTINGS_PATH, label: "autocompact", validate: validator, defaults: { ...DEFAULT_AUTOCOMPACT_SETTINGS } });
   }
 
   async function persistSettings(ctx: ExtensionContext): Promise<void> {

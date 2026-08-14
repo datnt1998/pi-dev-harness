@@ -6,6 +6,7 @@
 import type { ExtensionAPI, ExtensionCommandContext, ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
+import { loadJsonSettings, rejectUnknownFields } from "../lib/config-load.ts";
 import { formatQuotaSnapshotThemed } from "../lib/provider-usage-core.ts";
 import { defaultQuotaLedgerPath, fetchUsage, resolveQuotaTarget } from "../lib/provider-usage-fetch.ts";
 import { JsonQuotaLedgerStore, getProviderQuotaAuthority, type ProviderQuotaAuthority } from "../lib/provider-usage-service.ts";
@@ -14,12 +15,15 @@ const KEY = "provider-usage";
 const REFRESH_MS = 5 * 60_000;
 
 function loadEnabled(cwd: string): boolean {
-  try {
-    const raw = JSON.parse(readFileSync(join(cwd, ".pi", "provider-usage.json"), "utf8")) as { enabled?: unknown };
-    return raw.enabled === true;
-  } catch {
-    return false;
-  }
+  return loadJsonSettings({
+    path: join(cwd, ".pi", "provider-usage.json"),
+    label: "provider-usage",
+    validate: (raw) => {
+      rejectUnknownFields(["enabled"])(raw, "provider-usage");
+      return raw.enabled === true;
+    },
+    defaults: false,
+  });
 }
 
 export default function providerUsage(pi: ExtensionAPI) {
