@@ -28,6 +28,9 @@ import {
   type EvidencedOutcomeResult,
   type TicketOutcome,
 } from "./ticket-runner-state.ts";
+import { parseTeamOrchestrationEnvelope } from "./team-orchestration-protocol.ts";
+import { assertEvidenceLocatorsResolve } from "./evidence-integrity.ts";
+import { defaultRegistry as evidenceDefaultRegistry } from "./evidence-integrity-default.ts";
 
 // ---------------------------------------------------------------------------
 // Consult surface (pure; no owner state, no journal writes)
@@ -143,6 +146,25 @@ export function applyEvidencedOutcomeWithRunTrack(
   }
 
   // allow — owner remains sole domain authority for validation and mutation.
+  // Before delegating to the owner, verify evidence locator referential integrity
+  // against the Run Track event log. This check is opt-in (only when runTrack is
+  // provided); the pure applyEvidencedOutcome path skips it entirely.
+  const parsed = parseTeamOrchestrationEnvelope(reportValue);
+  if (parsed.ok) {
+    try {
+      assertEvidenceLocatorsResolve(evidenceDefaultRegistry, parsed.value, runTrack.entries);
+    } catch (err) {
+      return {
+        ok: false,
+        error: {
+          code: "invalid-report",
+          message: err instanceof Error ? err.message : String(err),
+        },
+        runTrack: consult,
+      };
+    }
+  }
+
   const ownerResult = applyEvidencedOutcome(state, id, reportValue, options?.expectedOutcome);
   return {
     ...ownerResult,

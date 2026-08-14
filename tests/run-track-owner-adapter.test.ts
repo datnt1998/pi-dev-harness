@@ -129,7 +129,7 @@ function reportFor(
           provider: { provider: "standards", fallback: false, effectiveModel: "verified", effectiveThinking: "verified" },
         },
         reviewedFingerprint: "implementation",
-        sealing: { mode: "capability", readOnlyCapabilities: ["read", "search"], evidenceLocator: "seal:standards" },
+        sealing: { mode: "capability", readOnlyCapabilities: ["read", "search"], evidenceLocator: "ev-1" },
         verdict: "no-findings",
         findings: [],
       },
@@ -148,7 +148,7 @@ function reportFor(
           mode: "serialized",
           preMutationFingerprint: "implementation",
           postMutationFingerprint: "implementation",
-          evidenceLocator: "seal:spec",
+          evidenceLocator: "ev-1",
         },
         verdict: "no-findings",
         findings: [],
@@ -635,9 +635,14 @@ test("adapter module holds no persistent state store and does not re-implement c
   // Does not re-implement owner completion gate or journal transition writes.
   assert.equal(source.includes("completionFailure"), false);
   assert.equal(source.includes("task.transition-observed"), false);
-  assert.equal(source.includes("parseTeamOrchestrationEnvelope"), false);
   assert.equal(source.includes("appendEntry"), false);
   assert.equal(source.includes("sessionManager"), false);
+  // Sanctioned seam (spec invariant-registry-and-evidence-audit R2): the adapter
+  // parses the envelope ONLY to run evidence locator referential integrity against
+  // the Run Track entries it already holds. It still never re-implements the owner
+  // completion gate (completionFailure stays absent above).
+  assert.match(source, /parseTeamOrchestrationEnvelope/);
+  assert.match(source, /assertEvidenceLocatorsResolve/);
   // Delegates to owner + pure Run Track core only.
   assert.match(source, /applyEvidencedOutcome/);
   assert.match(source, /projectRunTrackBranch/);
