@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { brand, type TicketId } from "../lib/brand.ts";
-import { InvariantViolation, assertBatchRunState, assertWorkerInputDerivable } from "../lib/invariants.ts";
+import { InvariantViolation } from "../lib/invariant-registry.ts";
+import { assertBatchRunState, assertWorkerInputDerivable } from "../lib/invariants.ts";
 import type { BatchRunState, RunTicket } from "../lib/ticket-runner-state.ts";
 
 /** Minimal valid state for mutation in fixtures. */
