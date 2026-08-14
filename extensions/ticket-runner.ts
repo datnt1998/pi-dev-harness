@@ -5,6 +5,7 @@ import { readFileSync } from "node:fs";
 import { isAbsolute, resolve } from "node:path";
 import { CONTINUATION_EVENT, continuationRegistry } from "../lib/continuation-event.ts";
 import { brand, unbrand, type LeaseId } from "../lib/brand.ts";
+import { assertBatchRunState } from "../lib/invariants.ts";
 import { manifestSource, parseImplementArgs } from "../lib/ticket-runner-input.ts";
 import { analyzeBatch, fingerprint, isRunnable, parseTickets } from "../lib/ticket-readiness.ts";
 import type { ActiveWriterLease, FixBriefEvidence, FindingDispositionEvidence } from "../lib/team-orchestration-protocol.ts";
@@ -94,7 +95,15 @@ export default function (pi: ExtensionAPI) {
   let continuationPending = false;
 
   function persist() {
-    if (current) pi.appendEntry(STATE_ENTRY, structuredClone(current) as unknown as Record<string, unknown>);
+    if (current) {
+      try {
+        assertBatchRunState(current);
+      } catch (err) {
+        console.error(err instanceof Error ? err.message : String(err));
+        return; // Do not persist a state that violates invariants
+      }
+      pi.appendEntry(STATE_ENTRY, structuredClone(current) as unknown as Record<string, unknown>);
+    }
   }
 
   function reconstruct(ctx: ExtensionContext) {
@@ -119,6 +128,13 @@ export default function (pi: ExtensionAPI) {
       return;
     }
     current = structuredClone(payload);
+    try {
+      assertBatchRunState(current);
+    } catch (err) {
+      // Load-side invariant failure: log named error but keep existing partial-candidate rebuild.
+      // Append-only recovery policy is unchanged.
+      console.error(err instanceof Error ? err.message : String(err));
+    }
     const lease = reconcileBatchWriterLease(current);
     if (!lease.ok) deactivate(current, `lease_${lease.error.code}`);
   }
