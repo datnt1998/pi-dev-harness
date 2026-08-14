@@ -1,3 +1,4 @@
+import type { TicketId } from "./brand.ts";
 import type {
   CompletionFidelity,
   DiversityEvidence,
@@ -77,7 +78,7 @@ export type PilotFindingSummary = {
 
 export type PilotRow = {
   source: string;
-  ticketId: string;
+  ticketId: TicketId;
   attempt: number;
   primary: boolean;
   realWork: boolean;

@@ -31,6 +31,7 @@ import {
   type TeamOrchestrationEnvelopeV1,
   type WriterLeaseEvidence,
 } from "./team-orchestration-protocol.ts";
+import { brand, unbrand, type BatchId, type LeaseId, type TicketId } from "./brand.ts";
 import { createPilotLedger, derivePilotRow, isPilotLedger, isWorkerLaneControl, recordPilotRow, type PilotLedger, type WorkerLaneControl } from "./team-orchestration-pilot.ts";
 
 export type AcceptedReportRecord = {
@@ -54,8 +55,8 @@ export type DecisionIndexEntry = {
 };
 
 export type RunTicket = {
-  id: string;
-  dependencies: string[];
+  id: TicketId;
+  dependencies: TicketId[];
   status: TicketRunStatus;
   attempts: number;
   note?: string;
@@ -64,7 +65,7 @@ export type RunTicket = {
 
 export type BatchRunState = {
   version: 1;
-  batchId: string;
+  batchId: BatchId;
   source: string;
   fingerprint: string;
   commit: boolean;
@@ -72,7 +73,7 @@ export type BatchRunState = {
   maxAttempts: number;
   maxContinuations: number;
   continuationsUsed: number;
-  order: string[];
+  order: TicketId[];
   tickets: RunTicket[];
   /** Canonical replayable owner decisions, deduplicated by structural evidence. */
   decisionIndex?: DecisionIndexEntry[];
@@ -275,16 +276,16 @@ export function createRunState(input: CreateRunInput): BatchRunState {
   const ticketInputs = input.tickets.filter((ticket, index, all) => all.findIndex((candidate) => candidate.id === ticket.id) === index);
   const ids = new Set(ticketInputs.map((t) => t.id));
   const tickets: RunTicket[] = ticketInputs.map((t) => ({
-    id: t.id,
-    dependencies: [...new Set(t.dependencies.filter((d) => ids.has(d) && d !== t.id))],
+    id: brand<TicketId>(t.id),
+    dependencies: [...new Set(t.dependencies.filter((d) => ids.has(d) && d !== t.id))].map((d) => brand<TicketId>(d)),
     status: "queued",
     attempts: 0,
   }));
   const requestedOrder = input.order.filter((id, index, all) => ids.has(id) && all.indexOf(id) === index);
-  const order = [...requestedOrder, ...ticketInputs.map((ticket) => ticket.id).filter((id) => !requestedOrder.includes(id))];
+  const order = [...requestedOrder, ...ticketInputs.map((ticket) => ticket.id).filter((id) => !requestedOrder.includes(id))].map((id) => brand<TicketId>(id));
   return {
     version: 1,
-    batchId: input.batchId,
+    batchId: brand<BatchId>(input.batchId),
     source: input.source,
     fingerprint: input.fingerprint,
     commit: input.commit ?? false,
@@ -524,15 +525,15 @@ function failureEvidenceFailure(report: TeamOrchestrationEnvelopeV1): string | u
 function decisionFailure(state: BatchRunState, report: TeamOrchestrationEnvelopeV1, activeTicket: RunTicket): string | undefined {
   const packet = report.decisionPacket;
   const knownIds = new Set(state.tickets.map((ticket) => ticket.id));
-  return packet && packet.affectedTicketIds.includes(activeTicket.id) && packet.affectedWorkUnitIds.includes(activeTicket.id)
-    && packet.affectedTicketIds.every((id) => knownIds.has(id)) && packet.affectedWorkUnitIds.every((id) => knownIds.has(id))
+  return packet && packet.affectedTicketIds.includes(activeTicket.id) && packet.affectedWorkUnitIds.includes(unbrand(activeTicket.id))
+    && packet.affectedTicketIds.every((id) => knownIds.has(id)) && packet.affectedWorkUnitIds.every((id) => knownIds.has(brand<TicketId>(id)))
     && rejectedOrEscalatedParentGate(report)
     ? undefined
     : "needs_decision requires a complete packet tied only to known batch work units and a parent rejected/escalated gate";
 }
 
-function sortedUnique(values: string[]): string[] {
-  return [...new Set(values)].sort((left, right) => left.localeCompare(right));
+function sortedUnique<T extends string>(values: T[]): T[] {
+  return [...new Set(values)].sort((left, right) => left.localeCompare(right)) as T[];
 }
 
 function combineText(existing: string, incoming: string): string {

@@ -14,6 +14,7 @@ import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import test from "node:test";
+import { brand, type LeaseId, type TicketId } from "../lib/brand.ts";
 import {
   applyEvidencedOutcomeWithRunTrack,
   consultRunTrackForOwnerCompletion,
@@ -199,14 +200,14 @@ function report(outcome: "completed" | "retry" | "failed" | "blocked" | "needs_d
   return reportFor("T1", 1, outcome);
 }
 
-function withRecordedLease(state: BatchRunState, leaseId = "lease-1", fingerprint = "implementation") {
+function withRecordedLease(state: BatchRunState, leaseId: LeaseId = brand<LeaseId>("lease-1"), fingerprint = "implementation") {
   assert.equal(acquireBatchWriterLease(state, {
     leaseId,
     worktreeKey: "active",
     owner: "writer",
     ownerRole: "parent",
     phase: "implementation",
-    ticketId: "T1",
+    ticketId: brand<TicketId>("T1"),
     attempt: 1,
     allowedPaths: ["lib/x.ts"],
     openedAt: "2026-01-01",

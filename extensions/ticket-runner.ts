@@ -4,6 +4,7 @@ import { StringEnum } from "@earendil-works/pi-ai";
 import { readFileSync } from "node:fs";
 import { isAbsolute, resolve } from "node:path";
 import { CONTINUATION_EVENT, continuationRegistry } from "../lib/continuation-event.ts";
+import { brand, unbrand, type LeaseId } from "../lib/brand.ts";
 import { manifestSource, parseImplementArgs } from "../lib/ticket-runner-input.ts";
 import { analyzeBatch, fingerprint, isRunnable, parseTickets } from "../lib/ticket-readiness.ts";
 import type { ActiveWriterLease, FixBriefEvidence, FindingDispositionEvidence } from "../lib/team-orchestration-protocol.ts";
@@ -427,7 +428,7 @@ export default function (pi: ExtensionAPI) {
           return { content: [{ type: "text", text: "Lease acquire rejected: no in-progress ticket." }], details: { ok: false, code: "invalid-transition" } };
         }
         const request: ActiveWriterLease = {
-          leaseId: params.leaseId,
+          leaseId: brand<LeaseId>(params.leaseId),
           worktreeKey: params.worktreeKey,
           owner: params.owner,
           ownerRole: params.ownerRole,

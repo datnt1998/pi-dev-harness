@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { brand, type LeaseId, type TicketId } from "../lib/brand.ts";
 import {
   acquireExclusiveWriterLease,
   authorizeFixWorkerRound,
@@ -20,7 +21,7 @@ import {
 function envelope(): TeamOrchestrationEnvelopeV1 {
   return {
     protocolVersion: 1,
-    workUnit: { source: "tickets.md", sourceFingerprint: "source-hash", ticketId: "T1", purpose: "production", attempt: 1 },
+    workUnit: { source: "tickets.md", sourceFingerprint: "source-hash", ticketId: brand<TicketId>("T1"), purpose: "production", attempt: 1 },
     runs: [{ role: "producer", actor: "writer-1", runId: "run-1", contextMode: "fresh", acceptanceMode: "checked", provider: { provider: "provider-a", model: "writer", requestedProvider: "requested-a", requestedModel: "requested-writer", fallback: false, effectiveModel: "verified", effectiveThinking: "verified" } }],
     eligibility: {
       lane: "parent",
@@ -39,7 +40,7 @@ function envelope(): TeamOrchestrationEnvelopeV1 {
       tinyKnownDiff: true,
       leaseSafetyAvailable: true,
     },
-    writerLease: { leaseId: "lease-1", ticketId: "T1", attempt: 1, worktreeKey: "active", owner: "writer-1", ownerRole: "parent", phase: "closed", allowedPaths: ["lib/example.ts"], openedAt: "2026-01-01T00:00:00Z", closedAt: "2026-01-01T00:01:00Z", handoffFingerprint: "implementation-hash" },
+    writerLease: { leaseId: brand<LeaseId>("lease-1"), ticketId: brand<TicketId>("T1"), attempt: 1, worktreeKey: "active", owner: "writer-1", ownerRole: "parent", phase: "closed", allowedPaths: ["lib/example.ts"], openedAt: "2026-01-01T00:00:00Z", closedAt: "2026-01-01T00:01:00Z", handoffFingerprint: "implementation-hash" },
     implementation: { changedPaths: ["lib/example.ts"], fingerprint: "implementation-hash" },
     producerObservations: [{ summary: "Changed the requested seam.", locators: ["lib/example.ts:1"], replayCommands: ["node --test tests/example.test.ts"] }],
     parentValidation: [{ command: "node --test tests/example.test.ts", outcome: "passed", locator: "test-output:1", observedFingerprint: "implementation-hash" }],
@@ -184,7 +185,7 @@ test("decision packets require replayable structural evidence for all pattern ki
     input.requestedOutcome = "needs_decision";
     input.parentGate.action = "escalated";
     input.decisionPacket = {
-      affectedWorkUnitIds: ["T1"], affectedTicketIds: ["T1"], affectedFiles: ["lib/example.ts"], locatorOrGlob: "lib/**/*.ts:1",
+      affectedWorkUnitIds: ["T1"], affectedTicketIds: [brand<TicketId>("T1")], affectedFiles: ["lib/example.ts"], locatorOrGlob: "lib/**/*.ts:1",
       searchedScope: "lib", exclusions: ["node_modules"], pattern: "missing stable decision invariant", patternKind,
       occurrences: 2, representativeLocators: ["lib/example.ts:1"], question: "Which invariant should govern this behavior?",
       safeDefault: "Leave behavior unchanged.", consequences: "Changing it could alter callers.", replayCommand: "rg invariant lib",
@@ -199,22 +200,22 @@ test("decision packets require replayable structural evidence for all pattern ki
   const notCounted = envelope() as any;
   notCounted.requestedOutcome = "needs_decision";
   notCounted.parentGate.action = "escalated";
-  notCounted.decisionPacket = { affectedWorkUnitIds: ["T1"], affectedTicketIds: ["T1"], affectedFiles: ["lib/example.ts"], locatorOrGlob: "lib/**/*.ts:1", searchedScope: "lib", exclusions: [], pattern: "shape", patternKind: "code-shape", notCountedReason: "generated files make a reliable count unavailable", representativeLocators: ["lib/example.ts:1"], question: "Choose behavior?", safeDefault: "Do nothing.", consequences: "Callers retain current behavior.", replayCommand: "rg shape lib", disconfirmProcedure: "Inspect matches.", blockedStage: "implementation", unrelatedWorkSafe: true };
+  notCounted.decisionPacket = { affectedWorkUnitIds: ["T1"], affectedTicketIds: [brand<TicketId>("T1")], affectedFiles: ["lib/example.ts"], locatorOrGlob: "lib/**/*.ts:1", searchedScope: "lib", exclusions: [], pattern: "shape", patternKind: "code-shape", notCountedReason: "generated files make a reliable count unavailable", representativeLocators: ["lib/example.ts:1"], question: "Choose behavior?", safeDefault: "Do nothing.", consequences: "Callers retain current behavior.", replayCommand: "rg shape lib", disconfirmProcedure: "Inspect matches.", blockedStage: "implementation", unrelatedWorkSafe: true };
   assert.equal(parseTeamOrchestrationEnvelope(notCounted).ok, true);
   notCounted.decisionPacket.occurrences = 1;
   assert.equal(parseTeamOrchestrationEnvelope(notCounted).ok, false);
 });
 
 test("decision equivalence includes the exact question but excludes aggregating evidence", () => {
-  const packet = { affectedWorkUnitIds: ["T1"], affectedTicketIds: ["T1"], affectedFiles: ["lib/x.ts"], locatorOrGlob: "lib/x.ts:1", searchedScope: "lib", exclusions: [], pattern: "missing invariant", patternKind: "code-shape" as const, occurrences: 1, representativeLocators: ["lib/x.ts:1"], question: "Which API?", safeDefault: "No change", consequences: "Compatibility", replayCommand: "rg x lib", disconfirmProcedure: "inspect", blockedStage: "implementation", unrelatedWorkSafe: true };
-  assert.equal(decisionPacketEquivalenceKey(packet), decisionPacketEquivalenceKey({ ...packet, affectedWorkUnitIds: ["T2"], affectedTicketIds: ["T2"], affectedFiles: ["tests/x.ts"], representativeLocators: ["tests/x.ts:1"], replayCommand: "rg x tests" }));
+  const packet = { affectedWorkUnitIds: ["T1"], affectedTicketIds: [brand<TicketId>("T1")], affectedFiles: ["lib/x.ts"], locatorOrGlob: "lib/x.ts:1", searchedScope: "lib", exclusions: [], pattern: "missing invariant", patternKind: "code-shape" as const, occurrences: 1, representativeLocators: ["lib/x.ts:1"], question: "Which API?", safeDefault: "No change", consequences: "Compatibility", replayCommand: "rg x lib", disconfirmProcedure: "inspect", blockedStage: "implementation", unrelatedWorkSafe: true };
+  assert.equal(decisionPacketEquivalenceKey(packet), decisionPacketEquivalenceKey({ ...packet, affectedWorkUnitIds: ["T2"], affectedTicketIds: [brand<TicketId>("T2")], affectedFiles: ["tests/x.ts"], representativeLocators: ["tests/x.ts:1"], replayCommand: "rg x tests" }));
   assert.notEqual(decisionPacketEquivalenceKey(packet), decisionPacketEquivalenceKey({ ...packet, question: "Please decide the API owner." }));
   assert.notEqual(decisionPacketEquivalenceKey(packet), decisionPacketEquivalenceKey({ ...packet, pattern: "different missing invariant" }));
 });
 
 test("decision packets are rejected for outcomes other than needs_decision", () => {
   const input = envelope() as any;
-  input.decisionPacket = { affectedWorkUnitIds: ["T1"], affectedTicketIds: ["T1"], affectedFiles: ["lib/x.ts"], locatorOrGlob: "lib/x.ts:1", searchedScope: "lib", exclusions: [], pattern: "shape", patternKind: "code-shape", occurrences: 1, representativeLocators: ["lib/x.ts:1"], question: "Which behavior?", safeDefault: "No change.", consequences: "Compatibility.", replayCommand: "rg shape lib", disconfirmProcedure: "Inspect matches.", blockedStage: "implementation", unrelatedWorkSafe: true };
+  input.decisionPacket = { affectedWorkUnitIds: ["T1"], affectedTicketIds: [brand<TicketId>("T1")], affectedFiles: ["lib/x.ts"], locatorOrGlob: "lib/x.ts:1", searchedScope: "lib", exclusions: [], pattern: "shape", patternKind: "code-shape", occurrences: 1, representativeLocators: ["lib/x.ts:1"], question: "Which behavior?", safeDefault: "No change.", consequences: "Compatibility.", replayCommand: "rg shape lib", disconfirmProcedure: "Inspect matches.", blockedStage: "implementation", unrelatedWorkSafe: true };
   assert.equal(parseTeamOrchestrationEnvelope(input).ok, false);
 });
 
@@ -341,22 +342,22 @@ test("eligibility routes only frozen bounded work to the worker lane and fails c
 
 test("exclusive writer leases reject overlap, stale close, and review while open", () => {
   const first = acquireExclusiveWriterLease(undefined, {
-    leaseId: "l1", worktreeKey: "active", owner: "worker-1", ownerRole: "worker", phase: "implementation",
-    ticketId: "T1", attempt: 1, allowedPaths: ["lib/example.ts"], openedAt: "2026-01-01T00:00:00Z",
+    leaseId: brand<LeaseId>("l1"), worktreeKey: "active", owner: "worker-1", ownerRole: "worker", phase: "implementation",
+    ticketId: brand<TicketId>("T1"), attempt: 1, allowedPaths: ["lib/example.ts"], openedAt: "2026-01-01T00:00:00Z",
   });
   assert.equal(first.ok, true);
   if (!first.ok) return;
   const overlap = acquireExclusiveWriterLease(first.value, {
-    leaseId: "l2", worktreeKey: "active", owner: "worker-2", ownerRole: "worker", phase: "implementation",
-    ticketId: "T1", attempt: 1, allowedPaths: ["lib/example.ts"], openedAt: "2026-01-01T00:00:01Z",
+    leaseId: brand<LeaseId>("l2"), worktreeKey: "active", owner: "worker-2", ownerRole: "worker", phase: "implementation",
+    ticketId: brand<TicketId>("T1"), attempt: 1, allowedPaths: ["lib/example.ts"], openedAt: "2026-01-01T00:00:01Z",
   });
   assert.equal(overlap.ok, false);
   if (!overlap.ok) assert.equal(overlap.error.code, "overlap");
   assert.equal(canStartReviewAgainstLease(first.value).ok, false);
-  const closed = closeExclusiveWriterLease(first.value, { leaseId: "l1", owner: "worker-1", closedAt: "2026-01-01T00:01:00Z", handoffFingerprint: "fp" });
+  const closed = closeExclusiveWriterLease(first.value, { leaseId: brand<LeaseId>("l1"), owner: "worker-1", closedAt: "2026-01-01T00:01:00Z", handoffFingerprint: "fp" });
   assert.equal(closed.ok, true);
   assert.equal(canStartReviewAgainstLease(closed.ok ? closed.value : undefined).ok, true);
-  const badClose = closeExclusiveWriterLease(first.value, { leaseId: "other", owner: "worker-1", closedAt: "2026-01-01T00:01:00Z", handoffFingerprint: "fp" });
+  const badClose = closeExclusiveWriterLease(first.value, { leaseId: brand<LeaseId>("other"), owner: "worker-1", closedAt: "2026-01-01T00:01:00Z", handoffFingerprint: "fp" });
   assert.equal(badClose.ok, false);
   if (!badClose.ok) assert.equal(badClose.error.code, "contradiction");
   const orphan = inspectPersistedWriterLease(first.value, { ticketStatuses: { T1: "completed" }, inProgressTicketId: undefined });
@@ -379,8 +380,8 @@ test("reviewer roles and read-only acceptance metadata never grant mutation auth
   assert.equal(roleMayAcquireWriterLease("producer", "checked"), false);
   assert.equal(roleMayAcquireWriterLease("worker", "reviewed"), true);
   const denied = acquireExclusiveWriterLease(undefined, {
-    leaseId: "l1", worktreeKey: "active", owner: "reviewer-a", ownerRole: "standards-reviewer" as any, phase: "implementation",
-    ticketId: "T1", attempt: 1, allowedPaths: ["lib/example.ts"], openedAt: "2026-01-01T00:00:00Z",
+    leaseId: brand<LeaseId>("l1"), worktreeKey: "active", owner: "reviewer-a", ownerRole: "standards-reviewer" as any, phase: "implementation",
+    ticketId: brand<TicketId>("T1"), attempt: 1, allowedPaths: ["lib/example.ts"], openedAt: "2026-01-01T00:00:00Z",
   });
   assert.equal(denied.ok, false);
   if (!denied.ok) assert.equal(denied.error.code, "reviewer-mutation-authority");
@@ -418,13 +419,13 @@ test("fix leases require parent dispositions, one ordinary round, and escalation
   assert.equal(authorizeFixWorkerRound({ priorFixRounds: 0, dispositions: [{ ...dispositions[0], disposition: "rejected" }], fixBrief: brief }).ok, false);
 
   const acquiredFix = acquireExclusiveWriterLease(undefined, {
-    leaseId: "fix-lease", worktreeKey: "active", owner: "fix-1", ownerRole: "fix-writer", phase: "fix",
-    ticketId: "T1", attempt: 1, allowedPaths: ["lib/example.ts"], openedAt: "2026-01-01T00:02:00Z", fixBriefId: "fix-1",
+    leaseId: brand<LeaseId>("fix-lease"), worktreeKey: "active", owner: "fix-1", ownerRole: "fix-writer", phase: "fix",
+    ticketId: brand<TicketId>("T1"), attempt: 1, allowedPaths: ["lib/example.ts"], openedAt: "2026-01-01T00:02:00Z", fixBriefId: "fix-1",
   }, { dispositions, fixBrief: brief, priorFixRounds: 0 });
   assert.equal(acquiredFix.ok, true);
   const second = acquireExclusiveWriterLease(undefined, {
-    leaseId: "fix-lease-2", worktreeKey: "active", owner: "fix-1", ownerRole: "fix-writer", phase: "fix",
-    ticketId: "T1", attempt: 1, allowedPaths: ["lib/example.ts"], openedAt: "2026-01-01T00:03:00Z", fixBriefId: "fix-1",
+    leaseId: brand<LeaseId>("fix-lease-2"), worktreeKey: "active", owner: "fix-1", ownerRole: "fix-writer", phase: "fix",
+    ticketId: brand<TicketId>("T1"), attempt: 1, allowedPaths: ["lib/example.ts"], openedAt: "2026-01-01T00:03:00Z", fixBriefId: "fix-1",
   }, { dispositions, fixBrief: brief, priorFixRounds: 1 });
   assert.equal(second.ok, false);
 
@@ -433,7 +434,7 @@ test("fix leases require parent dispositions, one ordinary round, and escalation
   fixed.reviews[0].findings = [{ id: "F1", severity: "medium", summary: "nit", locator: "lib/example.ts:1", replay: "node --test" }];
   fixed.dispositions = dispositions;
   const fixLease = {
-    leaseId: "fix-lease", ticketId: "T1", attempt: 1, worktreeKey: "active", owner: "fix-1", ownerRole: "fix-writer" as const, phase: "closed" as const,
+    leaseId: brand<LeaseId>("fix-lease"), ticketId: brand<TicketId>("T1"), attempt: 1, worktreeKey: "active", owner: "fix-1", ownerRole: "fix-writer" as const, phase: "closed" as const,
     allowedPaths: ["lib/example.ts"], openedAt: "2026-01-01T00:02:00Z", closedAt: "2026-01-01T00:03:00Z",
     handoffFingerprint: "implementation-hash", fixBriefId: "fix-1",
   };
@@ -457,7 +458,7 @@ test("fix leases require parent dispositions, one ordinary round, and escalation
   escalate.parentGate.action = "escalated";
   escalate.fixAndRereview = { round: 2, fixApplied: false, escalatedInsteadOfSecondFix: true, escalationLocator: "decision:second-fix" };
   escalate.decisionPacket = {
-    affectedWorkUnitIds: ["T1"], affectedTicketIds: ["T1"], affectedFiles: ["lib/example.ts"], locatorOrGlob: "lib/example.ts:1",
+    affectedWorkUnitIds: ["T1"], affectedTicketIds: [brand<TicketId>("T1")], affectedFiles: ["lib/example.ts"], locatorOrGlob: "lib/example.ts:1",
     searchedScope: "lib", exclusions: [], pattern: "repeated fix need", patternKind: "decision-category", occurrences: 2,
     representativeLocators: ["lib/example.ts:1"], question: "How should the remaining semantic conflict be resolved?",
     safeDefault: "Escalate to owner.", consequences: "No silent fix loop.", replayCommand: "rg conflict lib",
@@ -525,18 +526,18 @@ test("fix lease allowedPaths must stay inside brief and eligibility scope", () =
   const dispositions = [{ findingId: "F1", disposition: "accepted" as const, parentActor: "parent-1", evidenceLocator: "d:1" }];
   const brief = { briefId: "fix-1", parentActor: "parent-1", acceptedFindingIds: ["F1"], scopePaths: ["lib/example.ts"], summary: "fix", issuedAt: "2026-01-01T00:02:00Z" };
   const outsideBrief = acquireExclusiveWriterLease(undefined, {
-    leaseId: "fix-lease", worktreeKey: "active", owner: "fix-1", ownerRole: "fix-writer", phase: "fix",
-    ticketId: "T1", attempt: 1, allowedPaths: ["lib/other.ts"], openedAt: "2026-01-01T00:02:00Z", fixBriefId: "fix-1",
+    leaseId: brand<LeaseId>("fix-lease"), worktreeKey: "active", owner: "fix-1", ownerRole: "fix-writer", phase: "fix",
+    ticketId: brand<TicketId>("T1"), attempt: 1, allowedPaths: ["lib/other.ts"], openedAt: "2026-01-01T00:02:00Z", fixBriefId: "fix-1",
   }, { dispositions, fixBrief: brief, priorFixRounds: 0, implementationScopePaths: ["lib/example.ts", "lib/other.ts"] });
   assert.equal(outsideBrief.ok, false);
   const outsideEligibility = acquireExclusiveWriterLease(undefined, {
-    leaseId: "fix-lease", worktreeKey: "active", owner: "fix-1", ownerRole: "fix-writer", phase: "fix",
-    ticketId: "T1", attempt: 1, allowedPaths: ["lib/example.ts"], openedAt: "2026-01-01T00:02:00Z", fixBriefId: "fix-1",
+    leaseId: brand<LeaseId>("fix-lease"), worktreeKey: "active", owner: "fix-1", ownerRole: "fix-writer", phase: "fix",
+    ticketId: brand<TicketId>("T1"), attempt: 1, allowedPaths: ["lib/example.ts"], openedAt: "2026-01-01T00:02:00Z", fixBriefId: "fix-1",
   }, { dispositions, fixBrief: brief, priorFixRounds: 0, implementationScopePaths: ["lib/other.ts"] });
   assert.equal(outsideEligibility.ok, false);
   const ok = acquireExclusiveWriterLease(undefined, {
-    leaseId: "fix-lease", worktreeKey: "active", owner: "fix-1", ownerRole: "fix-writer", phase: "fix",
-    ticketId: "T1", attempt: 1, allowedPaths: ["lib/example.ts"], openedAt: "2026-01-01T00:02:00Z", fixBriefId: "fix-1",
+    leaseId: brand<LeaseId>("fix-lease"), worktreeKey: "active", owner: "fix-1", ownerRole: "fix-writer", phase: "fix",
+    ticketId: brand<TicketId>("T1"), attempt: 1, allowedPaths: ["lib/example.ts"], openedAt: "2026-01-01T00:02:00Z", fixBriefId: "fix-1",
   }, { dispositions, fixBrief: brief, priorFixRounds: 0, implementationScopePaths: ["lib/example.ts"] });
   assert.equal(ok.ok, true);
 });
@@ -545,7 +546,7 @@ test("focused re-review after an applied fix enforces load-bearing axis integrit
   const dispositions = [{ findingId: "F1", disposition: "accepted" as const, parentActor: "parent-1", evidenceLocator: "d:1" }];
   const brief = { briefId: "fix-1", parentActor: "parent-1", acceptedFindingIds: ["F1"], scopePaths: ["lib/example.ts"], summary: "fix", issuedAt: "2026-01-01T00:02:00Z" };
   const fixLease = {
-    leaseId: "fix-lease", ticketId: "T1", attempt: 1, worktreeKey: "active", owner: "fix-1", ownerRole: "fix-writer" as const, phase: "closed" as const,
+    leaseId: brand<LeaseId>("fix-lease"), ticketId: brand<TicketId>("T1"), attempt: 1, worktreeKey: "active", owner: "fix-1", ownerRole: "fix-writer" as const, phase: "closed" as const,
     allowedPaths: ["lib/example.ts"], openedAt: "2026-01-01T00:02:00Z", closedAt: "2026-01-01T00:03:00Z",
     handoffFingerprint: "implementation-hash", fixBriefId: "fix-1",
   };

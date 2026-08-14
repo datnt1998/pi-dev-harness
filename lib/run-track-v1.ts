@@ -10,6 +10,7 @@
  */
 
 import { createHash } from "node:crypto";
+import { brand, type EventId } from "./brand.ts";
 
 // ---------------------------------------------------------------------------
 // Public constants
@@ -53,7 +54,7 @@ export type AcknowledgmentOrigin = "operator-interactive";
 type EventBase = {
   v: typeof RUN_TRACK_VERSION;
   ns: typeof RUN_TRACK_NAMESPACE;
-  id: string;
+  id: EventId;
   ts: string;
   trackId: string;
 };
@@ -130,7 +131,7 @@ export type ProjectedEvidence = {
   trust: EvidenceTrust;
   resolution: EvidenceResolution;
   fingerprint: string;
-  eventId: string;
+  eventId: EventId;
   order: number;
 };
 
@@ -142,7 +143,7 @@ export type ProjectedOccurrence = {
   policyVersion: string;
   factsDigest: string;
   order: number;
-  eventId: string;
+  eventId: EventId;
 };
 
 export type ProjectedAcknowledgment = {
@@ -153,11 +154,11 @@ export type ProjectedAcknowledgment = {
   factsDigest: string;
   origin: AcknowledgmentOrigin;
   order: number;
-  eventId: string;
+  eventId: EventId;
 };
 
 export type ProjectedTransition = {
-  eventId: string;
+  eventId: EventId;
   action: string;
   factsDigest: string;
   degraded: boolean;
@@ -371,7 +372,7 @@ function baseFields(raw: Record<string, unknown>): ParseResult<EventBase> {
     value: {
       v: RUN_TRACK_VERSION,
       ns: RUN_TRACK_NAMESPACE,
-      id: raw.id,
+      id: brand<EventId>(raw.id as string),
       ts: raw.ts,
       trackId: raw.trackId,
     },

@@ -9,6 +9,7 @@
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { randomBytes } from "node:crypto";
 import { Type } from "typebox";
+import { brand, type EventId } from "../lib/brand.ts";
 import {
   RUN_TRACK_NAMESPACE,
   RUN_TRACK_POLICY_VERSION,
@@ -194,7 +195,7 @@ export function ensureRunTrackStarted(
     v: RUN_TRACK_VERSION,
     ns: RUN_TRACK_NAMESPACE,
     kind: "task.started",
-    id: newToken("evt"),
+    id: brand<EventId>(newToken("evt")),
     ts: nowIso(),
     trackId: typeof input.trackId === "string" && input.trackId.length > 0 ? input.trackId : newToken("track"),
     sessionId,
@@ -269,7 +270,7 @@ export function recordSelfAttestedEvidence(
     v: RUN_TRACK_VERSION,
     ns: RUN_TRACK_NAMESPACE,
     kind: "evidence.recorded" as const,
-    id: newToken("evt"),
+    id: brand<EventId>(newToken("evt")),
     ts: nowIso(),
     trackId: projection.trackId,
     evidenceId: typeof input.evidenceId === "string" && input.evidenceId.length > 0 ? input.evidenceId : newToken("ev"),
@@ -324,7 +325,7 @@ export function consultEvidenceTransition(
       v: RUN_TRACK_VERSION,
       ns: RUN_TRACK_NAMESPACE,
       kind: "task.transition-observed" as const,
-      id: newToken("evt"),
+      id: brand<EventId>(newToken("evt")),
       ts: nowIso(),
       trackId: projection.trackId,
       action: plan.transitionProposal.action,
@@ -389,7 +390,7 @@ export function consultEvidenceTransition(
       v: RUN_TRACK_VERSION,
       ns: RUN_TRACK_NAMESPACE,
       kind: "guardrail.occurred" as const,
-      id: newToken("evt"),
+      id: brand<EventId>(newToken("evt")),
       ts: nowIso(),
       trackId: projection.trackId,
       action: plan.occurrenceProposal.action,
@@ -541,7 +542,7 @@ export function acknowledgeGuardrailOccurrence(
     v: RUN_TRACK_VERSION,
     ns: RUN_TRACK_NAMESPACE,
     kind: "guardrail.acknowledged" as const,
-    id: newToken("evt"),
+    id: brand<EventId>(newToken("evt")),
     ts: nowIso(),
     trackId: projection.trackId,
     occurrenceId: occurrence.occurrenceId,

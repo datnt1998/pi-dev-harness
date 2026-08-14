@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { brand, type LeaseId, type TicketId } from "../lib/brand.ts";
 import {
   acquireBatchWriterLease,
   applyEvidencedOutcome,
@@ -60,7 +61,7 @@ function reportFor(ticketId: string, attempt: number, outcome: "completed" | "re
       tinyKnownDiff: true,
       leaseSafetyAvailable: true,
     },
-    writerLease: { leaseId: "lease-1", ticketId, attempt, worktreeKey: "active", owner: "writer", ownerRole: "parent", phase: "closed", allowedPaths: ["lib/x.ts"], openedAt: "2026-01-01", closedAt: "2026-01-01", handoffFingerprint: "implementation" },
+    writerLease: { leaseId: brand<LeaseId>("lease-1"), ticketId, attempt, worktreeKey: "active", owner: "writer", ownerRole: "parent", phase: "closed", allowedPaths: ["lib/x.ts"], openedAt: "2026-01-01", closedAt: "2026-01-01", handoffFingerprint: "implementation" },
     implementation: { changedPaths: ["lib/x.ts"], fingerprint: "implementation" },
     producerObservations: [{ summary: "observed failure", locators: ["log:1"], replayCommands: ["node --test"] }],
     parentValidation: [{ command: "node --test", outcome: validationOutcome, locator: "log:2", observedFingerprint: "implementation" }],
@@ -80,10 +81,10 @@ function report(outcome: "completed" | "retry" | "failed" | "blocked" | "needs_d
   return reportFor("T1", 1, outcome);
 }
 
-function withRecordedLease(state: ReturnType<typeof baseState>, leaseId = "lease-1", fingerprint = "implementation") {
+function withRecordedLease(state: ReturnType<typeof baseState>, leaseId: LeaseId = brand<LeaseId>("lease-1"), fingerprint = "implementation") {
   assert.equal(acquireBatchWriterLease(state, {
     leaseId, worktreeKey: "active", owner: "writer", ownerRole: "parent", phase: "implementation",
-    ticketId: "T1", attempt: 1, allowedPaths: ["lib/x.ts"], openedAt: "2026-01-01",
+    ticketId: brand<TicketId>("T1"), attempt: 1, allowedPaths: ["lib/x.ts"], openedAt: "2026-01-01",
   }).ok, true);
   assert.equal(closeBatchWriterLease(state, {
     leaseId, owner: "writer", closedAt: "2026-01-01", handoffFingerprint: fingerprint,
@@ -510,21 +511,21 @@ test("batch writer leases are exclusive, block review while open, and survive re
   const state = baseState();
   startTicket(state, "T1");
   const first = acquireBatchWriterLease(state, {
-    leaseId: "lease-1", worktreeKey: "active", owner: "writer", ownerRole: "parent", phase: "implementation",
-    ticketId: "T1", attempt: 1, allowedPaths: ["lib/x.ts"], openedAt: "2026-01-01",
+    leaseId: brand<LeaseId>("lease-1"), worktreeKey: "active", owner: "writer", ownerRole: "parent", phase: "implementation",
+    ticketId: brand<TicketId>("T1"), attempt: 1, allowedPaths: ["lib/x.ts"], openedAt: "2026-01-01",
   });
   assert.equal(first.ok, true);
   assert.equal(assertBatchReviewAllowed(state).ok, false);
   const second = acquireBatchWriterLease(state, {
-    leaseId: "lease-2", worktreeKey: "active", owner: "other", ownerRole: "worker", phase: "implementation",
-    ticketId: "T1", attempt: 1, allowedPaths: ["lib/x.ts"], openedAt: "2026-01-01",
+    leaseId: brand<LeaseId>("lease-2"), worktreeKey: "active", owner: "other", ownerRole: "worker", phase: "implementation",
+    ticketId: brand<TicketId>("T1"), attempt: 1, allowedPaths: ["lib/x.ts"], openedAt: "2026-01-01",
   });
   assert.equal(second.ok, false);
   if (!second.ok) assert.equal(second.error.code, "overlap");
   assert.equal(isBatchRunState(structuredClone(state)), true);
   assert.equal(reconcileBatchWriterLease(state).ok, true);
 
-  const closed = closeBatchWriterLease(state, { leaseId: "lease-1", owner: "writer", closedAt: "2026-01-01", handoffFingerprint: "implementation" });
+  const closed = closeBatchWriterLease(state, { leaseId: brand<LeaseId>("lease-1"), owner: "writer", closedAt: "2026-01-01", handoffFingerprint: "implementation" });
   assert.equal(closed.ok, true);
   assert.equal(assertBatchReviewAllowed(state).ok, true);
   assert.equal(state.activeWriterLease, undefined);
@@ -533,8 +534,8 @@ test("batch writer leases are exclusive, block review while open, and survive re
   // Orphaned lease after the ticket leaves in_progress fails closed on reconcile.
   startTicket(state, "T1");
   assert.equal(acquireBatchWriterLease(state, {
-    leaseId: "lease-3", worktreeKey: "active", owner: "writer", ownerRole: "parent", phase: "implementation",
-    ticketId: "T1", attempt: 1, allowedPaths: ["lib/x.ts"], openedAt: "2026-01-02",
+    leaseId: brand<LeaseId>("lease-3"), worktreeKey: "active", owner: "writer", ownerRole: "parent", phase: "implementation",
+    ticketId: brand<TicketId>("T1"), attempt: 1, allowedPaths: ["lib/x.ts"], openedAt: "2026-01-02",
   }).ok, true);
   state.tickets[0].status = "completed";
   const orphan = reconcileBatchWriterLease(state);
@@ -546,8 +547,8 @@ test("evidenced completion rejects contradictory open leases and clears a matchi
   const state = baseState();
   startTicket(state, "T1");
   assert.equal(acquireBatchWriterLease(state, {
-    leaseId: "lease-1", worktreeKey: "active", owner: "writer", ownerRole: "parent", phase: "implementation",
-    ticketId: "T1", attempt: 1, allowedPaths: ["lib/x.ts"], openedAt: "2026-01-01",
+    leaseId: brand<LeaseId>("lease-1"), worktreeKey: "active", owner: "writer", ownerRole: "parent", phase: "implementation",
+    ticketId: brand<TicketId>("T1"), attempt: 1, allowedPaths: ["lib/x.ts"], openedAt: "2026-01-01",
   }).ok, true);
   const contradiction = report();
   contradiction.writerLease.leaseId = "other-lease";
@@ -573,8 +574,8 @@ test("self-asserted closed completion without a recorded lease is rejected", () 
 test("non-completed outcomes cannot leave an open lease orphaned", () => {
   const state = baseState(); startTicket(state, "T1");
   assert.equal(acquireBatchWriterLease(state, {
-    leaseId: "lease-open", worktreeKey: "active", owner: "writer", ownerRole: "parent", phase: "implementation",
-    ticketId: "T1", attempt: 1, allowedPaths: ["lib/x.ts"], openedAt: "2026-01-01",
+    leaseId: brand<LeaseId>("lease-open"), worktreeKey: "active", owner: "writer", ownerRole: "parent", phase: "implementation",
+    ticketId: brand<TicketId>("T1"), attempt: 1, allowedPaths: ["lib/x.ts"], openedAt: "2026-01-01",
   }).ok, true);
   const openRetry = report("retry");
   openRetry.writerLease.phase = "implementation";
@@ -595,8 +596,8 @@ test("non-completed outcomes cannot leave an open lease orphaned", () => {
 test("isBatchRunState rejects orphaned open leases and deactivate clears mutation authority", () => {
   const state = baseState(); startTicket(state, "T1");
   assert.equal(acquireBatchWriterLease(state, {
-    leaseId: "lease-1", worktreeKey: "active", owner: "writer", ownerRole: "parent", phase: "implementation",
-    ticketId: "T1", attempt: 1, allowedPaths: ["lib/x.ts"], openedAt: "2026-01-01",
+    leaseId: brand<LeaseId>("lease-1"), worktreeKey: "active", owner: "writer", ownerRole: "parent", phase: "implementation",
+    ticketId: brand<TicketId>("T1"), attempt: 1, allowedPaths: ["lib/x.ts"], openedAt: "2026-01-01",
   }).ok, true);
   assert.equal(isBatchRunState(structuredClone(state)), true);
   state.tickets[0].status = "queued";
@@ -613,28 +614,28 @@ test("fix lease paths must stay inside brief and eligibility scope at batch acqu
   const dispositions = [{ findingId: "F1", disposition: "accepted" as const, parentActor: "parent", evidenceLocator: "d:1" }];
   const brief = { briefId: "fix-1", parentActor: "parent", acceptedFindingIds: ["F1"], scopePaths: ["lib/x.ts"], summary: "fix", issuedAt: "2026-01-01" };
   const outside = acquireBatchWriterLease(state, {
-    leaseId: "fix-1", worktreeKey: "active", owner: "fix-writer", ownerRole: "fix-writer", phase: "fix",
-    ticketId: "T1", attempt: 1, allowedPaths: ["lib/y.ts"], openedAt: "2026-01-01", fixBriefId: "fix-1",
+    leaseId: brand<LeaseId>("fix-1"), worktreeKey: "active", owner: "fix-writer", ownerRole: "fix-writer", phase: "fix",
+    ticketId: brand<TicketId>("T1"), attempt: 1, allowedPaths: ["lib/y.ts"], openedAt: "2026-01-01", fixBriefId: "fix-1",
   }, { dispositions, fixBrief: brief, priorFixRounds: 0, implementationScopePaths: ["lib/x.ts", "lib/y.ts"] });
   assert.equal(outside.ok, false);
   const ok = acquireBatchWriterLease(state, {
-    leaseId: "fix-1", worktreeKey: "active", owner: "fix-writer", ownerRole: "fix-writer", phase: "fix",
-    ticketId: "T1", attempt: 1, allowedPaths: ["lib/x.ts"], openedAt: "2026-01-01", fixBriefId: "fix-1",
+    leaseId: brand<LeaseId>("fix-1"), worktreeKey: "active", owner: "fix-writer", ownerRole: "fix-writer", phase: "fix",
+    ticketId: brand<TicketId>("T1"), attempt: 1, allowedPaths: ["lib/x.ts"], openedAt: "2026-01-01", fixBriefId: "fix-1",
   }, { dispositions, fixBrief: brief, priorFixRounds: 0, implementationScopePaths: ["lib/x.ts"] });
   assert.equal(ok.ok, true);
 });
 
 test("fixApplied completion requires implementation-then-fix lease history and rejects bare fix evidence", () => {
   const state = baseState(); startTicket(state, "T1");
-  withRecordedLease(state, "impl-lease", "implementation");
+  withRecordedLease(state, brand<LeaseId>("impl-lease"), "implementation");
   const dispositions = [{ findingId: "F1", disposition: "accepted" as const, parentActor: "parent", evidenceLocator: "d:1" }];
   const brief = { briefId: "fix-1", parentActor: "parent", acceptedFindingIds: ["F1"], scopePaths: ["lib/x.ts"], summary: "fix", issuedAt: "2026-01-02" };
   assert.equal(acquireBatchWriterLease(state, {
-    leaseId: "fix-lease", ticketId: "T1", attempt: 1, worktreeKey: "active", owner: "fix-writer", ownerRole: "fix-writer", phase: "fix",
+    leaseId: brand<LeaseId>("fix-lease"), ticketId: brand<TicketId>("T1"), attempt: 1, worktreeKey: "active", owner: "fix-writer", ownerRole: "fix-writer", phase: "fix",
     allowedPaths: ["lib/x.ts"], openedAt: "2026-01-02", fixBriefId: "fix-1",
   }, { dispositions, fixBrief: brief, implementationScopePaths: ["lib/x.ts"] }).ok, true);
   assert.equal(closeBatchWriterLease(state, {
-    leaseId: "fix-lease", owner: "fix-writer", closedAt: "2026-01-02", handoffFingerprint: "implementation",
+    leaseId: brand<LeaseId>("fix-lease"), owner: "fix-writer", closedAt: "2026-01-02", handoffFingerprint: "implementation",
   }).ok, true);
 
   const fixed = report();
@@ -642,7 +643,7 @@ test("fixApplied completion requires implementation-then-fix lease history and r
   fixed.reviews[0].findings = [{ id: "F1", severity: "medium", summary: "nit", locator: "lib/x.ts:1", replay: "node --test" }];
   fixed.dispositions = dispositions;
   const fixLease = {
-    leaseId: "fix-lease", ticketId: "T1", attempt: 1, worktreeKey: "active", owner: "fix-writer", ownerRole: "fix-writer", phase: "closed",
+    leaseId: brand<LeaseId>("fix-lease"), ticketId: brand<TicketId>("T1"), attempt: 1, worktreeKey: "active", owner: "fix-writer", ownerRole: "fix-writer", phase: "closed",
     allowedPaths: ["lib/x.ts"], openedAt: "2026-01-02", closedAt: "2026-01-02", handoffFingerprint: "implementation", fixBriefId: "fix-1",
   };
   fixed.writerLease = { ...fixLease };
@@ -670,13 +671,13 @@ test("closed lease history is scoped to each ticket attempt", () => {
   const brief = { briefId: "fix-1", parentActor: "parent", acceptedFindingIds: ["F1"], scopePaths: ["lib/x.ts"], summary: "fix", issuedAt: "2026-01-01" };
 
   startTicket(state, "T1");
-  assert.equal(acquireBatchWriterLease(state, { leaseId: "t1-fix", worktreeKey: "active", owner: "fix", ownerRole: "fix-writer", phase: "fix", ticketId: "T1", attempt: 1, allowedPaths: ["lib/x.ts"], openedAt: "2026-01-01", fixBriefId: "fix-1" }, { dispositions, fixBrief: brief, implementationScopePaths: ["lib/x.ts"] }).ok, true);
-  assert.equal(closeBatchWriterLease(state, { leaseId: "t1-fix", owner: "fix", closedAt: "2026-01-01", handoffFingerprint: "implementation" }).ok, true);
+  assert.equal(acquireBatchWriterLease(state, { leaseId: brand<LeaseId>("t1-fix"), worktreeKey: "active", owner: "fix", ownerRole: "fix-writer", phase: "fix", ticketId: brand<TicketId>("T1"), attempt: 1, allowedPaths: ["lib/x.ts"], openedAt: "2026-01-01", fixBriefId: "fix-1" }, { dispositions, fixBrief: brief, implementationScopePaths: ["lib/x.ts"] }).ok, true);
+  assert.equal(closeBatchWriterLease(state, { leaseId: brand<LeaseId>("t1-fix"), owner: "fix", closedAt: "2026-01-01", handoffFingerprint: "implementation" }).ok, true);
   state.tickets[0].status = "completed";
 
   startTicket(state, "T2");
-  assert.equal(acquireBatchWriterLease(state, { leaseId: "t2-fix", worktreeKey: "active", owner: "fix", ownerRole: "fix-writer", phase: "fix", ticketId: "T2", attempt: 1, allowedPaths: ["lib/x.ts"], openedAt: "2026-01-02", fixBriefId: "fix-1" }, { dispositions, fixBrief: brief, implementationScopePaths: ["lib/x.ts"] }).ok, true);
-  assert.equal(closeBatchWriterLease(state, { leaseId: "t2-fix", owner: "fix", closedAt: "2026-01-02", handoffFingerprint: "implementation" }).ok, true);
+  assert.equal(acquireBatchWriterLease(state, { leaseId: brand<LeaseId>("t2-fix"), worktreeKey: "active", owner: "fix", ownerRole: "fix-writer", phase: "fix", ticketId: brand<TicketId>("T2"), attempt: 1, allowedPaths: ["lib/x.ts"], openedAt: "2026-01-02", fixBriefId: "fix-1" }, { dispositions, fixBrief: brief, implementationScopePaths: ["lib/x.ts"] }).ok, true);
+  assert.equal(closeBatchWriterLease(state, { leaseId: brand<LeaseId>("t2-fix"), owner: "fix", closedAt: "2026-01-02", handoffFingerprint: "implementation" }).ok, true);
   assert.equal(isBatchRunState(structuredClone(state)), true);
 
   const wrongTicket = reportFor("T2", 1);
@@ -690,19 +691,19 @@ test("fix lease acquisition requires parent dispositions and blocks a second ord
   const dispositions = [{ findingId: "F1", disposition: "accepted" as const, parentActor: "parent", evidenceLocator: "d:1" }];
   const brief = { briefId: "fix-1", parentActor: "parent", acceptedFindingIds: ["F1"], scopePaths: ["lib/x.ts"], summary: "apply accepted fix", issuedAt: "2026-01-01" };
   const missing = acquireBatchWriterLease(state, {
-    leaseId: "fix-1", worktreeKey: "active", owner: "fix-writer", ownerRole: "fix-writer", phase: "fix",
-    ticketId: "T1", attempt: 1, allowedPaths: ["lib/x.ts"], openedAt: "2026-01-01", fixBriefId: "fix-1",
+    leaseId: brand<LeaseId>("fix-1"), worktreeKey: "active", owner: "fix-writer", ownerRole: "fix-writer", phase: "fix",
+    ticketId: brand<TicketId>("T1"), attempt: 1, allowedPaths: ["lib/x.ts"], openedAt: "2026-01-01", fixBriefId: "fix-1",
   });
   assert.equal(missing.ok, false);
   const first = acquireBatchWriterLease(state, {
-    leaseId: "fix-1", worktreeKey: "active", owner: "fix-writer", ownerRole: "fix-writer", phase: "fix",
-    ticketId: "T1", attempt: 1, allowedPaths: ["lib/x.ts"], openedAt: "2026-01-01", fixBriefId: "fix-1",
+    leaseId: brand<LeaseId>("fix-1"), worktreeKey: "active", owner: "fix-writer", ownerRole: "fix-writer", phase: "fix",
+    ticketId: brand<TicketId>("T1"), attempt: 1, allowedPaths: ["lib/x.ts"], openedAt: "2026-01-01", fixBriefId: "fix-1",
   }, { dispositions, fixBrief: brief, priorFixRounds: 0 });
   assert.equal(first.ok, true);
-  assert.equal(closeBatchWriterLease(state, { leaseId: "fix-1", owner: "fix-writer", closedAt: "2026-01-01", handoffFingerprint: "implementation" }).ok, true);
+  assert.equal(closeBatchWriterLease(state, { leaseId: brand<LeaseId>("fix-1"), owner: "fix-writer", closedAt: "2026-01-01", handoffFingerprint: "implementation" }).ok, true);
   const second = acquireBatchWriterLease(state, {
-    leaseId: "fix-2", worktreeKey: "active", owner: "fix-writer", ownerRole: "fix-writer", phase: "fix",
-    ticketId: "T1", attempt: 1, allowedPaths: ["lib/x.ts"], openedAt: "2026-01-02", fixBriefId: "fix-1",
+    leaseId: brand<LeaseId>("fix-2"), worktreeKey: "active", owner: "fix-writer", ownerRole: "fix-writer", phase: "fix",
+    ticketId: brand<TicketId>("T1"), attempt: 1, allowedPaths: ["lib/x.ts"], openedAt: "2026-01-02", fixBriefId: "fix-1",
   }, { dispositions, fixBrief: brief, priorFixRounds: 1 });
   assert.equal(second.ok, false);
   if (!second.ok) assert.equal(second.error.code, "fix-round-exhausted");
@@ -713,9 +714,9 @@ test("pilot ledger and worker-lane control persist and fail closed", () => {
   state.workerLaneControl = { mode: "disabled", reason: "T2 rework threshold", locator: "pilot:T2", operatorConsequence: "Use the parent writer while retaining evidence and review controls." };
   assert.equal(isBatchRunState(structuredClone(state)), true);
   startTicket(state, "T1");
-  const denied = acquireBatchWriterLease(state, { leaseId: "worker-1", worktreeKey: "active", owner: "worker", ownerRole: "worker", phase: "implementation", ticketId: "T1", attempt: 1, allowedPaths: ["lib/x.ts"], openedAt: "2026-01-01" });
+  const denied = acquireBatchWriterLease(state, { leaseId: brand<LeaseId>("worker-1"), worktreeKey: "active", owner: "worker", ownerRole: "worker", phase: "implementation", ticketId: brand<TicketId>("T1"), attempt: 1, allowedPaths: ["lib/x.ts"], openedAt: "2026-01-01" });
   assert.equal(denied.ok, false);
-  assert.equal(acquireBatchWriterLease(state, { leaseId: "parent-1", worktreeKey: "active", owner: "parent", ownerRole: "parent", phase: "implementation", ticketId: "T1", attempt: 1, allowedPaths: ["lib/x.ts"], openedAt: "2026-01-01" }).ok, true);
+  assert.equal(acquireBatchWriterLease(state, { leaseId: brand<LeaseId>("parent-1"), worktreeKey: "active", owner: "parent", ownerRole: "parent", phase: "implementation", ticketId: brand<TicketId>("T1"), attempt: 1, allowedPaths: ["lib/x.ts"], openedAt: "2026-01-01" }).ok, true);
   const malformed = structuredClone(state) as any;
   malformed.workerLaneControl = { mode: "disabled" };
   assert.equal(isBatchRunState(malformed), false);

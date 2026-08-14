@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { brand, type LeaseId, type TicketId } from "./brand.ts";
 import { isPilotMetrics, type PilotMetrics } from "./team-orchestration-pilot.ts";
 
 /** The only evidence-envelope version understood by this package revision. */
@@ -55,7 +56,7 @@ export type NormalizedProviderIdentity = {
 export type WorkUnitIdentity = {
   source: string;
   sourceFingerprint: string;
-  ticketId: string;
+  ticketId: TicketId;
   purpose: string;
   attempt: number;
 };
@@ -73,9 +74,9 @@ export type RunProvenance = {
 };
 
 export type WriterLeaseEvidence = {
-  leaseId: string;
+  leaseId: LeaseId;
   /** Work-unit coordinates retained after close for per-ticket/attempt provenance. */
-  ticketId: string;
+  ticketId: TicketId;
   attempt: number;
   /** Stable key for the exclusive worktree/mutation domain. */
   worktreeKey: string;
@@ -93,12 +94,12 @@ export type WriterLeaseEvidence = {
 
 /** Runtime exclusive lease for one active worktree. Open phases only. */
 export type ActiveWriterLease = {
-  leaseId: string;
+  leaseId: LeaseId;
   worktreeKey: string;
   owner: string;
   ownerRole: WriterOwnerRole;
   phase: Exclude<WriterPhase, "closed">;
-  ticketId: string;
+  ticketId: TicketId;
   attempt: number;
   allowedPaths: string[];
   openedAt: string;
@@ -267,7 +268,7 @@ export type ParentGate = {
 /** Replayable owner-decision evidence. The exact blocking question is part of its identity. */
 export type DecisionPacket = {
   affectedWorkUnitIds: string[];
-  affectedTicketIds: string[];
+  affectedTicketIds: TicketId[];
   affectedFiles: string[];
   locatorOrGlob: string;
   searchedScope: string;
