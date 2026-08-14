@@ -5,7 +5,6 @@ import { mkdtempSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { spawnSync } from "node:child_process";
-// @ts-expect-error -- untyped ESM core under test
 import {
   CATEGORIES,
   CONDITIONS,
@@ -166,7 +165,7 @@ const SCORES_3 = { correctness: 3, autonomy: 3, actionability: 3, safety: 3, con
 const SCORES_4 = { correctness: 4, autonomy: 4, actionability: 4, safety: 4, concision: 4 };
 
 /** Build one judgment per key row; `byCondition` maps condition -> score overrides. */
-function judge(key: Array<Record<string, unknown>>, byCondition: Record<string, Record<string, unknown>>) {
+function judge(key: Array<Record<string, unknown>>, byCondition: Record<string, Record<string, unknown>>): Array<Record<string, unknown>> {
   return key.map((row) => ({
     sample_id: row.sample_id,
     blocker: false,
@@ -197,7 +196,7 @@ function scoreFixture(opts: {
         row.id === oracleCaseId && evidenceOverride !== undefined
           ? { evidence: evidenceOverride }
           : row.oracle
-            ? { evidence: passingEvidence(row.oracle) }
+            ? { evidence: passingEvidence(row.oracle as Record<string, unknown>) }
             : { evidence: undefined };
       responses.push(responseRow({ condition, case_id: row.id as string, assistant_tokens: tokens, ...extra, ...evidence }));
     }
@@ -402,14 +401,14 @@ test("blind output order is shuffled independently of input and condition groupi
   const responses = pairedResponses() as Array<Record<string, unknown>>;
   const inputOrder = responses.map((row) => `${row.case_id}|${row.trial}|${row.condition}`);
   const { samples, key } = blindFixture(responses);
-  const keyBySample = new Map(key.map((row: Record<string, unknown>) => [row.sample_id, row]));
-  const outputOrder = samples.map((sample) => {
+  const keyBySample = new Map<unknown, Record<string, unknown>>(key.map((row: Record<string, unknown>) => [row.sample_id, row]));
+  const outputOrder = samples.map((sample: Record<string, unknown>) => {
     const keyRow = keyBySample.get(sample.sample_id)!;
     return `${keyRow.case_id}|${keyRow.trial}|${keyRow.condition}`;
   });
   assert.notDeepEqual(outputOrder, inputOrder, "sample order must not echo the input order");
   // the old protocol leak: baseline-first condition grouping must not survive
-  const conditionSequence = samples.map((sample) => keyBySample.get(sample.sample_id)!.condition);
+  const conditionSequence = samples.map((sample: Record<string, unknown>) => keyBySample.get(sample.sample_id)!.condition);
   assert.notDeepEqual(conditionSequence, ["baseline", "baseline", "candidate", "candidate"]);
   assert.notDeepEqual(conditionSequence, ["candidate", "candidate", "baseline", "baseline"]);
 });
@@ -1135,18 +1134,18 @@ test("C2: score requires the judged samples and rejects sample-text tampering", 
   assert.equal(noSamples.release.decision, "error");
   assert.ok(noSamples.release.reasons.some((reason: string) => /requires the judged samples file/i.test(reason)));
 
-  const keyBySample = new Map(key.map((row) => [row.sample_id, row]));
-  const baseSample = samples.find((s) => keyBySample.get(s.sample_id)?.condition === "baseline" && s.case_id === "case-a")!;
-  const candSample = samples.find((s) => keyBySample.get(s.sample_id)?.condition === "candidate" && s.case_id === "case-a")!;
+  const keyBySample = new Map<unknown, Record<string, unknown>>(key.map((row: Record<string, unknown>) => [row.sample_id, row]));
+  const baseSample = samples.find((s: Record<string, unknown>) => keyBySample.get(s.sample_id)?.condition === "baseline" && s.case_id === "case-a")!;
+  const candSample = samples.find((s: Record<string, unknown>) => keyBySample.get(s.sample_id)?.condition === "candidate" && s.case_id === "case-a")!;
 
   // reproduced exploit: baseline sample text replaced with the candidate's before judging
-  const swapped = samples.map((s) => (s.sample_id === baseSample.sample_id ? { ...s, response: candSample.response } : s));
+  const swapped = samples.map((s: Record<string, unknown>) => (s.sample_id === baseSample.sample_id ? { ...s, response: candSample.response } : s));
   const swapSummary = scoreEvaluation({ judgments, key, responses, samples: swapped, judge: judgeRecord, manifest });
   assert.equal(swapSummary.release.decision, "error");
   assert.ok(swapSummary.release.reasons.some((reason: string) => /sample digest mismatch for/i.test(reason)), JSON.stringify(swapSummary.release));
 
   // digest recomputed to match the swapped text, but the key still binds the original
-  const forged = samples.map((s) =>
+  const forged = samples.map((s: Record<string, unknown>) =>
     s.sample_id === baseSample.sample_id
       ? { ...s, response: candSample.response, response_sha256: responseSha256(candSample.response) }
       : s,
@@ -1165,7 +1164,7 @@ test("C2: score requires the judged samples and rejects sample-text tampering", 
   assert.ok(extraSummary.release.reasons.some((reason: string) => /sample row references unknown sample_id/i.test(reason)));
 
   // case/trial identity must agree between samples and key
-  const relabeled = samples.map((s) => (s.sample_id === baseSample.sample_id ? { ...s, case_id: "case-b" } : s));
+  const relabeled = samples.map((s: Record<string, unknown>) => (s.sample_id === baseSample.sample_id ? { ...s, case_id: "case-b" } : s));
   const relabeledSummary = scoreEvaluation({ judgments, key, responses, samples: relabeled, judge: judgeRecord, manifest });
   assert.equal(relabeledSummary.release.decision, "error");
   assert.ok(relabeledSummary.release.reasons.some((reason: string) => /sample\/key identity mismatch/i.test(reason)));
@@ -1288,7 +1287,7 @@ test("H2 (integration): the credential gate runs in a real git repo — conformi
     const startSha = git("rev-parse", "HEAD").stdout.trim();
     return { dir, env, git, startSha };
   };
-  const runGate = (dir: string, env: Record<string, string>) => spawnSync("sh", ["-c", gate], { cwd: dir, env, encoding: "utf8" });
+  const runGate = (dir: string, env: Record<string, string | undefined>) => spawnSync("sh", ["-c", gate], { cwd: dir, env, encoding: "utf8" });
 
   // conforming: the secret lives only in the seeded, committed baseline fixture
   {
@@ -1373,7 +1372,7 @@ test("H2 (integration): the credential gate runs in a real git repo — conformi
   // missing start SHA fails closed
   {
     const { dir, env } = fixture();
-    const noSha = { ...env };
+    const noSha = { ...env } as Record<string, string | undefined>;
     delete noSha.EVAL_ROW_START_SHA;
     assert.notEqual(runGate(dir, noSha).status, 0, "missing EVAL_ROW_START_SHA must fail closed");
   }
@@ -1515,7 +1514,7 @@ test("L1: the cryptographic shuffle uses rejection sampling, not modulo bias", (
   // still a valid, deterministic permutation under injected rng
   const result = blindResponses(pairedResponses(), { manifest: manifestFixture(), rng: detRng(3) });
   assert.deepEqual(result.errors, []);
-  assert.equal(new Set(result.samples.map((s) => s.sample_id)).size, result.samples.length);
+  assert.equal(new Set(result.samples.map((s: Record<string, unknown>) => s.sample_id)).size, result.samples.length);
 });
 
 test("L2: evidence.gate is required only when the oracle declares a gate", () => {
@@ -1554,7 +1553,7 @@ test("L3: package_sha must be an exact 40-hex commit SHA", () => {
 
 test("L5: one malformed key row does not cascade into bogus 'no key row' errors for later rows", () => {
   const { judgments, key, responses, samples, judge, manifest } = scoreFixture();
-  const broken = key.map((row, index) => (index === 0 ? { ...row, model: undefined } : row));
+  const broken = key.map((row: Record<string, unknown>, index: number) => (index === 0 ? { ...row, model: undefined } : row));
   const summary = scoreEvaluation({ judgments, key: broken, responses, samples, judge, manifest });
   assert.equal(summary.release.decision, "error");
   assert.ok(summary.release.reasons.some((reason: string) => /key row 1: model must be a non-empty string/i.test(reason)), JSON.stringify(summary.release));

@@ -48,7 +48,7 @@ type BranchCtx = { sessionManager: { getBranch: () => readonly unknown[]; getSes
 export type OperatorAckContext = BranchCtx & {
   mode?: string;
   hasUI?: boolean;
-  ui?: { notify?: (message: string, level?: string) => void };
+  ui?: { notify?: (message: string, level?: "info" | "warning" | "error") => void };
 };
 
 export type RunTrackToolResult = {

@@ -188,7 +188,7 @@ export type EvidenceTransitionRequest = {
   /** Domain evidence-transition claim name (not a lifecycle mutation). */
   action: string;
   /** Evidence keys that must be present and resolved for an allow. */
-  requiredKeys: string[];
+  requiredKeys: readonly string[];
 };
 
 export type OccurrenceProposal = {
@@ -328,7 +328,7 @@ export function runTrackEvaluationDigest(facts: unknown): string {
   return `${RUN_TRACK_EVAL_DIGEST_PREFIX}${hex}`;
 }
 
-function enforceEventSize(event: RunTrackEvent): ParseResult<RunTrackEvent> {
+function enforceEventSize<T extends RunTrackEvent>(event: T): ParseResult<T> {
   let serialized: string;
   try {
     serialized = canonicalRunTrackJson(event);

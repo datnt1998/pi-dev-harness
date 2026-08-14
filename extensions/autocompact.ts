@@ -65,6 +65,7 @@ import {
   safeCtx,
   safeCtxAsync,
   shouldShowIndicator,
+  type SkillObservation,
 } from "../lib/autocompact-core.ts";
 
 const GLOBAL_SETTINGS_PATH = join(process.env.PI_CODING_AGENT_DIR || join(homedir(), ".pi", "agent"), "autocompact.json");
@@ -73,6 +74,10 @@ function piProjectSettingsPath(cwd: string): string {
   return join(cwd, ".pi", "settings.json");
 }
 const UI_KEY = "autocompact";
+/** Child agents share the project settings file with the parent and must never mutate it. */
+function isSubagentChild(): boolean {
+  return process.env.PI_SUBAGENT_CHILD === "1";
+}
 /** Stop auto-attempts after this many consecutive failures (built-in safety net still applies). */
 const MAX_AUTO_FAILURES = 2;
 
@@ -97,7 +102,7 @@ type AutoCompactState = {
  * "best-known path" contract), efforts dedupe by name.
  */
 function mergeObservations(base: ActivityObservations, extra: ActivityObservations): ActivityObservations {
-  const skills = new Map(base.skills.map((s) => [s.name, { ...s }] as const));
+  const skills = new Map<string, SkillObservation>(base.skills.map((s) => [s.name, { ...s }]));
   for (const skill of extra.skills) {
     const existing = skills.get(skill.name);
     if (existing) {
@@ -166,7 +171,7 @@ export default function autocompact(pi: ExtensionAPI) {
   }
 
   /**
-   * Align Pi's native between-turns compaction with our trigger by writing
+   * When explicitly enabled, align Pi's native between-turns compaction with our trigger by writing
    * `compaction.reserveTokens` into the PROJECT Pi settings (`.pi/settings.json`),
    * so a long single run compacts mid-run without interrupting it. This is the
    * only non-aborting mid-run mechanism (our own ctx.compact() aborts the run).
@@ -174,10 +179,10 @@ export default function autocompact(pi: ExtensionAPI) {
    * Project-scoped only (never touches global settings, so a per-model reserve
    * never leaks to other projects) and applies from the next session/reload,
    * since Pi has no runtime setter for reserveTokens. Field-merge preserves any
-   * other keys; Pi never writes reserveTokens itself, so our value is not clobbered.
+   * other keys. Child subagents never write the shared project settings file.
    */
   async function syncNativeReserve(ctx: ExtensionContext): Promise<void> {
-    if (state.settings.syncNativeReserve === false || !state.settings.enabled) return;
+    if (isSubagentChild() || state.settings.syncNativeReserve !== true || !state.settings.enabled) return;
     // Every ctx getter below throws once the session is replaced across an await
     // (e.g. a fork during `directoryExists`); treat that as a silent no-op so the
     // fire-and-forget turn_end call can never crash teardown. Genuine write

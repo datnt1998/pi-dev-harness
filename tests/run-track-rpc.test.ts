@@ -672,7 +672,6 @@ test("sdk integration: clone/fork lineage via deriveRunTrackFork (idempotent, no
     const injected = deriveRunTrackFork({
       parent: parentProj,
       childSessionId: forked.getSessionId(),
-      // @ts-expect-error intentional
       parentTrackId: "forged-parent",
       parentSessionId: "forged-session",
       rootTrackId: "forged-root",

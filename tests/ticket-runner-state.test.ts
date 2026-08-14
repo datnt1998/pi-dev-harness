@@ -631,7 +631,7 @@ test("fixApplied completion requires implementation-then-fix lease history and r
   const brief = { briefId: "fix-1", parentActor: "parent", acceptedFindingIds: ["F1"], scopePaths: ["lib/x.ts"], summary: "fix", issuedAt: "2026-01-02" };
   assert.equal(acquireBatchWriterLease(state, {
     leaseId: "fix-lease", ticketId: "T1", attempt: 1, worktreeKey: "active", owner: "fix-writer", ownerRole: "fix-writer", phase: "fix",
-    ticketId: "T1", attempt: 1, allowedPaths: ["lib/x.ts"], openedAt: "2026-01-02", fixBriefId: "fix-1",
+    allowedPaths: ["lib/x.ts"], openedAt: "2026-01-02", fixBriefId: "fix-1",
   }, { dispositions, fixBrief: brief, implementationScopePaths: ["lib/x.ts"] }).ok, true);
   assert.equal(closeBatchWriterLease(state, {
     leaseId: "fix-lease", owner: "fix-writer", closedAt: "2026-01-02", handoffFingerprint: "implementation",

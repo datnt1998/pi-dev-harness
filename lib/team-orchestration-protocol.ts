@@ -359,14 +359,21 @@ export function normalizeProviderIdentity(identity: Pick<ProviderIdentity, "prov
   if (!nonEmpty(rawProvider)) return undefined;
   const provider = rawProvider.trim().normalize("NFKC").toLowerCase().split(/[/:]/, 1)[0].trim().replace(/\s+/g, "-");
   if (!provider) return undefined;
-  const model = typeof identity === "string" ? undefined : identity.model?.trim().normalize("NFKC").toLowerCase();
+  const model = typeof identity === "string" || !identity ? undefined : identity.model?.trim().normalize("NFKC").toLowerCase();
   return model ? { provider, model } : { provider };
 }
 
+/**
+ * Provider identity as topology input: only `provider` is required; all other
+ * provenance fields (fallback, effective-model/thinking confidence) are optional
+ * because classification only degrades when those facts are actually present.
+ */
+export type TopologyProviderIdentity = Pick<ProviderIdentity, "provider"> & Partial<ProviderIdentity>;
+
 export type IndependenceTopology = {
-  producer?: ProviderIdentity;
-  standards?: ProviderIdentity;
-  spec?: ProviderIdentity;
+  producer?: TopologyProviderIdentity;
+  standards?: TopologyProviderIdentity;
+  spec?: TopologyProviderIdentity;
   producerActor?: string;
   standardsActor?: string;
   specActor?: string;
@@ -381,7 +388,7 @@ export function classifyIndependence(topology: IndependenceTopology): Independen
   if (!topology.producer) return "unknown";
   if (topology.producerActor && (topology.producerActor === topology.standardsActor || topology.producerActor === topology.specActor)) return "self-review";
   if (topology.combined || (topology.standardsActor !== undefined && topology.standardsActor === topology.specActor)) return "combined";
-  const provenance = [topology.producer, topology.standards, topology.spec] as Array<Pick<ProviderIdentity, "provider" | "model"> & Partial<ProviderIdentity>>;
+  const provenance = [topology.producer, topology.standards, topology.spec];
   // Actual route facts, not requested route names, control the claim. A fallback
   // or absent/unverified effective-thinking observation cannot be clean evidence.
   if (provenance.some((identity) => identity.fallback === true || (topology.requireVerifiedEffectiveThinking && (identity.effectiveModel !== "verified" || identity.effectiveThinking !== "verified")))) return "unknown";
@@ -793,7 +800,7 @@ function hasRequiredEnvelopeShape(value: Record<string, unknown>): boolean {
     && (fix.escalationLocator === undefined || nonEmpty(fix.escalationLocator))
     && (value.parentImplementationAfterDelegation === undefined || validParentImplementationAfterDelegation(value.parentImplementationAfterDelegation))
     && (value.pilotMetrics === undefined || isPilotMetrics(value.pilotMetrics))
-    && object(fidelity) && object(fidelity.criteria) && ["C1", "C2", "C3", "C4", "C5", "C6", "C7"].every((key) => validCriterion(fidelity.criteria[key])) && Array.isArray(fidelity.claims) && fidelity.claims.every((claim) => object(claim) && nonEmpty(claim.claim) && nonEmpty(claim.locator) && nonEmpty(claim.verifiedBy))
+    && object(fidelity) && object(fidelity.criteria) && ["C1", "C2", "C3", "C4", "C5", "C6", "C7"].every((key) => validCriterion((fidelity.criteria as Record<string, unknown>)[key])) && Array.isArray(fidelity.claims) && fidelity.claims.every((claim) => object(claim) && nonEmpty(claim.claim) && nonEmpty(claim.locator) && nonEmpty(claim.verifiedBy))
     && object(diversity) && typeof diversity.degraded === "boolean" && (diversity.warning === undefined || validWarning(diversity.warning)) && (diversity.acknowledgment === undefined || validAcknowledgment(diversity.acknowledgment)) && Array.isArray(value.residualRisks) && value.residualRisks.every(nonEmpty)
     && ["completed", "retry", "failed", "blocked", "needs_decision"].includes(value.requestedOutcome as string)
     && object(gate);

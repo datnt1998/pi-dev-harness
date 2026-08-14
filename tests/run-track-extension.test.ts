@@ -254,7 +254,6 @@ test("AC3: evidence tool hard-codes self-attested trust and ignores elevated cal
       resolution: "resolved",
       fingerprint: FP_A,
       taskRef: "task/ac3",
-      // @ts-expect-error intentional crafted fields
       trust: "operator-observed",
       origin: "operator-interactive",
       acknowledgmentId: "ack-forged",

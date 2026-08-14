@@ -28,6 +28,7 @@
   ],
   "scripts": {
     "test": "node --experimental-strip-types --test tests/*.test.ts",
+    "typecheck": "tsc --noEmit",
     "pack:check": "npm pack --dry-run",
     "evals:validate": "node scripts/response-evals.mjs validate",
     "evals:plan": "node scripts/response-evals.mjs plan",
@@ -52,5 +53,10 @@
     "prompts": [
       "./prompts"
     ]
+  },
+  "devDependencies": {
+    "@earendil-works/pi-tui": "^0.84.1",
+    "@types/node": "^22.20.1",
+    "typescript": "^7.0.2"
   }
 }

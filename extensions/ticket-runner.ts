@@ -1,4 +1,4 @@
-import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
+import type { CustomEntry, ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
 import { StringEnum } from "@earendil-works/pi-ai";
 import { readFileSync } from "node:fs";
@@ -98,12 +98,13 @@ export default function (pi: ExtensionAPI) {
 
   function reconstruct(ctx: ExtensionContext) {
     current = undefined;
-    const snapshots = ctx.sessionManager.getBranch().filter((entry) => entry.type === "custom" && entry.customType === STATE_ENTRY);
+    const snapshots = ctx.sessionManager.getBranch().filter((entry): entry is CustomEntry<unknown> => entry.type === "custom" && entry.customType === STATE_ENTRY);
     if (snapshots.length === 0) return;
     const latest = snapshots.at(-1)!;
-    if (!isBatchRunState(latest.data)) {
+    const payload = latest.data;
+    if (!isBatchRunState(payload)) {
       // Persisted authority is append-only: never roll back past a corrupt newest snapshot.
-      const candidate = latest.data as Partial<BatchRunState>;
+      const candidate = payload as Partial<BatchRunState>;
       if (candidate && typeof candidate === "object" && candidate.version === 1 && typeof candidate.batchId === "string") {
         current = createRunState({
           batchId: candidate.batchId,
@@ -116,7 +117,7 @@ export default function (pi: ExtensionAPI) {
       }
       return;
     }
-    current = structuredClone(latest.data);
+    current = structuredClone(payload);
     const lease = reconcileBatchWriterLease(current);
     if (!lease.ok) deactivate(current, `lease_${lease.error.code}`);
   }
