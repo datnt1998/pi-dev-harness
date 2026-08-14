@@ -96,9 +96,9 @@ const gcAreas: GcAreaInput[] = [
     kind: "sessions",
     root: "/fake/sessions/project--cwd--",
     facts: [
-      { path: "/fake/sessions/project--cwd--/session-old.jsonl", mtimeMs: 1700000000000 - 40 * 86400000, sizeBytes: 1024 },
-      { path: "/fake/sessions/project--cwd--/session-recent.jsonl", mtimeMs: 1700000000000 - 5 * 86400000, sizeBytes: 2048 },
-      { path: "/fake/sessions/project--cwd--/session-current.jsonl", mtimeMs: 1700000000000 - 1000, sizeBytes: 512 },
+      { path: "/fake/sessions/project--cwd--/session-old.jsonl", mtimeMs: 1700000000000 - 40 * 86400000, sizeBytes: 1024, kind: "file" },
+      { path: "/fake/sessions/project--cwd--/session-recent.jsonl", mtimeMs: 1700000000000 - 5 * 86400000, sizeBytes: 2048, kind: "file" },
+      { path: "/fake/sessions/project--cwd--/session-current.jsonl", mtimeMs: 1700000000000 - 1000, sizeBytes: 512, kind: "file" },
     ],
   },
 ];

@@ -170,6 +170,17 @@ export default function harnessTui(pi: ExtensionAPI) {
     });
   }
 
+  // Guard: after a session reload/replacement the captured ctx becomes stale
+  // and throws on any property access. Lifecycle handlers must no-op rather
+  // than propagate — the new session will re-fire these events with a fresh ctx.
+  const STALE_CTX_PATTERN = /stale/i;
+  function safe(fn: () => void): void {
+    try { fn(); } catch (err) {
+      if (err instanceof Error && STALE_CTX_PATTERN.test(err.message)) return;
+      throw err;
+    }
+  }
+
   pi.on("session_start", async (_event, ctx) => {
     try {
       state.settings = loadSettings(ctx.cwd);
@@ -194,24 +205,28 @@ export default function harnessTui(pi: ExtensionAPI) {
     void refreshUsage(ctx);
     timer = setInterval(() => { if (lastCtx) void refreshUsage(lastCtx); }, REFRESH_MS);
   });
-  pi.on("agent_start", (_event, ctx) => { state.running = true; render(ctx); });
-  pi.on("agent_settled", (_event, ctx) => { state.running = false; render(ctx); });
-  pi.on("thinking_level_select", (event, ctx) => { state.thinking = event.level; render(ctx); });
+  pi.on("agent_start", (_event, ctx) => { safe(() => { state.running = true; render(ctx); }); });
+  pi.on("agent_settled", (_event, ctx) => { safe(() => { state.running = false; render(ctx); }); });
+  pi.on("thinking_level_select", (event, ctx) => { safe(() => { state.thinking = event.level; render(ctx); }); });
   pi.on("model_select", (_event, ctx) => {
-    state.thinking = pi.getThinkingLevel();
-    render(ctx);
-    void refreshUsage(ctx);
+    safe(() => {
+      state.thinking = pi.getThinkingLevel();
+      render(ctx);
+      void refreshUsage(ctx);
+    });
   });
   pi.on("after_provider_response", (event, ctx) => {
-    if (event.status === 401 || event.status === 403 || event.status === 429) void refreshUsage(ctx);
+    safe(() => { if (event.status === 401 || event.status === 403 || event.status === 429) void refreshUsage(ctx); });
   });
   pi.on("session_shutdown", (_event, ctx) => {
-    controller?.abort();
-    unsubscribeQuota?.();
-    unsubscribeQuota = undefined;
-    if (timer) clearInterval(timer);
-    timer = undefined;
-    if (ctx.mode === "tui") ctx.ui.setFooter(undefined);
+    safe(() => {
+      controller?.abort();
+      unsubscribeQuota?.();
+      unsubscribeQuota = undefined;
+      if (timer) clearInterval(timer);
+      timer = undefined;
+      if (ctx.mode === "tui") ctx.ui.setFooter(undefined);
+    });
   });
 
   pi.registerCommand("harness-tui", {
