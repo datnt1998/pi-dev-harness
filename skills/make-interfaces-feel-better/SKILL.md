@@ -146,3 +146,12 @@ Rows should cite the specific file and the specific property that changed when i
 - [surfaces.md](surfaces.md) — Border radius, optical alignment, shadows, image outlines
 - [animations.md](animations.md) — Interruptible animations, enter/exit transitions, icon animations, scale on press
 - [performance.md](performance.md) — Transition specificity, `will-change` usage
+
+## Known limitations
+
+Design heuristics are opinionated defaults tuned for web UIs; native/mobile platforms may need different values. Animations assume CSS transitions — JS-driven animation libraries require adaptation.
+
+
+## Known limitations
+
+Design heuristics are opinionated defaults tuned for web UIs; native/mobile platforms may need different values. Animation guidance assumes CSS transitions; JS-driven animation libraries need adaptation.

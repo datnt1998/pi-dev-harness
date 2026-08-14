@@ -66,3 +66,12 @@ Never create a parallel changelog or release module when the repository already 
 ## Final report
 
 Report version/workspace, changed authorities, validation, commit/tag state, and separately authorized remaining actions. Happy path is one terse line; expand blockers, unknown release facts, production risk, or rollback gaps.
+
+## Known limitations
+
+Version discovery relies on repository conventions (tags, package.json, changelog); unconventional or multi-source version schemes may require manual override. Release notes are generated from commits and cannot capture unwritten context.
+
+
+## Known limitations
+
+Discovery follows the repository's own release contract; repositories with no clear versioning convention require a human decision before any tag or publish. The skill never pushes, publishes, or deploys.

@@ -45,3 +45,20 @@ Curated performance + architecture rules for browser-focused React applications.
 - Route browser storage or external clients through an existing project seam; do not invent a `src/lib/storage.ts` convention when the repository uses another architecture.
 - Follow the repository's file-size/component conventions. Extract components for a clear ownership or render boundary, not an arbitrary package default.
 - Record framework/version, frontend roots, storage/data seams, and any line budget in the project's `AGENTS.md`.
+
+## Configuration surface
+
+No configuration file. Framework/version, frontend roots, and line budgets are read from the project's `AGENTS.md` or inferred from the repository structure.
+
+## Known limitations
+
+Best practices are React-specific and version-sensitive; rules calibrated for one rendering mode (e.g., SSR vs CSR) may not apply to another. Bundle-size guidance assumes a bundler with tree-shaking support.
+
+
+## Configuration surface
+
+No configuration file. The skill is guidance applied by the agent; project-specific budgets and seams come from the repository AGENTS.md, not from skill settings.
+
+## Known limitations
+
+Guidance targets React-specific patterns; applicability to non-React codebases is out of scope. Recommendations assume modern React (hooks, concurrent features) and may not hold for class-component era code.

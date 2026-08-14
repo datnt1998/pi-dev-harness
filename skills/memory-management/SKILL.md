@@ -99,3 +99,12 @@ Generation is **off by default**. When the user runs `/memories generate on`:
 Gates A–D are implemented. Defaults stay safe: use=off, generate=off,
 global=off. Lifecycle hooks never call a model; the only spend path is the
 explicit, visible worker pass with quota/day/cooldown caps.
+
+## Known limitations
+
+Memory storage is best-effort and bounded by provider token limits; search recall depends on embedding quality and may miss relevant entries when the query vocabulary diverges from stored phrasing.
+
+
+## Known limitations
+
+Memory storage is best-effort; recall quality depends on how entries were phrased when stored, and stale or corrected entries must be managed explicitly.

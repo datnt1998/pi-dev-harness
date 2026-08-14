@@ -29,3 +29,12 @@ Production push/deploy/publish always requires explicit approval even when every
 ## Report
 
 Pass: one terse line. Otherwise list blockers first, then deferred/unverified risks and exact next action. No technical transcript.
+
+## Known limitations
+
+Risk assessment is based on changed files and declared dependencies; undocumented side effects or cross-service impacts outside the repository are invisible to the gate.
+
+
+## Known limitations
+
+The gate is advisory and evidence-based on the local repo state; it cannot verify external systems, credentials, or runtime production behavior beyond what the diff and docs show.

@@ -150,3 +150,12 @@ Load only as needed:
 - `references/validation-testing-guide.md` — validation and drift audit.
 - `references/team-examples.md` — example reusable harness designs.
 - `references/engineering-workflow-integration.md` — how Pi harness resources connect to real engineering workflows and subagents.
+
+## Known limitations
+
+Harness validation checks structural contracts but cannot verify runtime behavior of custom extensions or themes; drift detection is text-based and may flag intentional divergence as drift.
+
+
+## Known limitations
+
+Audit findings are advisory; the skill cannot execute Pi to prove an extension or theme works — validation still requires the repo test suite and a real Pi session.

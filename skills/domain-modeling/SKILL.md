@@ -79,3 +79,20 @@ with the three-part test applied fresh each time. Writing several ADRs in a row 
 session end is a tell: decisions were not recorded when made. Stop and record each
 against its own decision context — mirror the glossary rule above ("capture as they
 happen," not batched).
+
+## Configuration surface
+
+No configuration file. Inputs are the project's existing docs, code, and ADRs; outputs are `CONTEXT.md` updates and ADR drafts.
+
+## Known limitations
+
+Domain terms are inferred from code/docs and may miss implicit conventions; glossary drift detection is string-based and cannot catch semantic synonymy across files.
+
+
+## Configuration surface
+
+No configuration file. Inputs are the project's existing docs, code, and ADRs; outputs are CONTEXT.md updates and ADR drafts.
+
+## Known limitations
+
+Domain terms are inferred from code/docs and may miss implicit conventions; glossary drift detection is string-based and cannot catch semantic synonymy across files.

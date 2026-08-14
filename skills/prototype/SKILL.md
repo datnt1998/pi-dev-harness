@@ -26,3 +26,20 @@ The two branches produce very different artifacts — getting this wrong wastes 
 4. **Skip the polish.** No tests, no error handling beyond what makes the prototype _runnable_, no abstractions. The point is to learn something fast.
 5. **Surface the state.** After every action (logic) or on every variant switch (UI), print or render the full relevant state so the user can see what changed.
 6. **Capture the answer when done.** Record the verdict and the question it settled in the implementation ticket/spec. The main branch keeps only the validated decision. If the prototype itself is valuable as a **primary source**, offer a user-approved capture mechanism such as a throwaway branch and context pointer; branch creation and commits still require explicit permission under `/skill:git-rules`.
+
+## Configuration surface
+
+No configuration file. The prototype scope, state model, and variant set come from the user's design question.
+
+## Known limitations
+
+Prototypes are throwaway by design — patterns validated in a prototype may not transfer cleanly to production architecture ; state models explored here should be re-evaluated against real constraints before adoption.
+
+
+## Configuration surface
+
+No configuration file. The throwaway prototype lives outside the main branch (temp dir or throwaway branch) and carries no settings of its own.
+
+## Known limitations
+
+Prototypes are disposable by design: they answer one design question, not production requirements. Code from a prototype is not reviewed or tested and must not be promoted to the main branch unchanged.

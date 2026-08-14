@@ -20,8 +20,9 @@ is installed, then delegates every canvas operation to the third-party
 - Convert an ASCII/textual sketch (e.g. from `handoff` or `code-review`) into a canvas.
 - Edit/arrange/connect/lint an already-open tldraw document.
 
-Prefer a quick ASCII sketch in chat for tiny throwaway ideas; use the canvas when
-the user wants a durable, shareable, or visual-first artifact.
+Prefer a quick ASCII sketch in chat for tiny throwaway ideas. Use
+`/skill:diagram-design` for a durable standalone HTML/SVG artifact; use this canvas
+bridge when the user wants an editable tldraw document or direct canvas work.
 
 ## Step 1 — Ensure it is installed
 
@@ -71,6 +72,7 @@ truth and may change with the app version.
 
 ## Pairs with
 
+- `/skill:diagram-design` — create an editorial file artifact when editability is not required.
 - `/skill:engineering-workflow` — visualize architecture during `to-spec`, or attach
   a diagram to a `handoff`.
 - `/skill:codebase-design` — diagram module seams and deep-module boundaries.
@@ -82,3 +84,20 @@ truth and may change with the app version.
 One terse line: the doc/page touched, shape/arrow count or the single verification
 result, and whether install was required. Expand only on install blockers or lint
 failures.
+
+## Configuration surface
+
+No configuration file. Diagram type, content, and layout come from the user's request ; hypa -c "the tldraw-offline operator skill handles rendering.
+
+## Known limitations
+
+Diagram fidelity depends on the tldraw-offline operator's installed primitives; complex layouts may require manual adjustment after generation. Export formats are limited to what tldraw supports natively.
+
+
+## Configuration surface
+
+No configuration file. Diagramming delegates to the installed tldraw-offline operator skill; install state is detected at use time.
+
+## Known limitations
+
+Diagram quality depends on the tldraw-offline operator's capabilities; without the operator app installed the skill can only guide installation, not draw. Complex layouts may need manual cleanup in the canvas.
