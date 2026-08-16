@@ -15,7 +15,7 @@ When the work involves changing Pi resources (`AGENTS.md`, `.pi/APPEND_SYSTEM.md
 
 1. **Alignment before action** — do not assume the user knows every edge case; interview when ambiguity matters.
 2. **Shared language** — maintain concise domain vocabulary and decisions in repository-declared glossary/ADR authorities; use `CONTEXT.md` and `docs/adr/` only as fallbacks.
-3. **Small feedback loops** — prefer tracer-bullet tickets, vertical slices, typecheck/test feedback, and red-green-refactor.
+3. **Right-sized feedback loops** — test application-owned behavior; run repository-native lint/type-check first, then the smallest related behavioral guard; broaden only for a named boundary or release gate.
 4. **Separate generation from review** — implementation and review should be separate phases; use subagents where useful.
 5. **Commit-ready checkpoints** — after each successful implementation, use `/skill:git-rules` to inspect git state and propose a standards-compliant commit.
 6. **Handoff as a first-class artifact** — long work should end with a compact continuation note.
@@ -132,13 +132,13 @@ Output artifacts:
 
 ### Implement
 
-Read `references/implementation-tdd.md`, `references/autonomous-execution.md`, and `references/completion-evidence.md`. When the target code has weak or no tests (brownfield/legacy), also read `references/legacy-refactor.md` and pin current behavior before changing it.
+Read `references/implementation-tdd.md`, `references/testing-strategy.md`, `references/autonomous-execution.md`, and `references/completion-evidence.md`. When the target code has weak or no tests (brownfield/legacy), also read `references/legacy-refactor.md` and pin current behavior before changing it.
 
 Rules:
 - Do not implement a large ambiguous plan without approval.
 - Prefer small vertical slices.
 - Refactoring untested/legacy code: characterize current behavior first, refactor under green, change behavior last (`references/legacy-refactor.md`).
-- Run focused checks often; full suite at the end when feasible.
+- Run repository-native lint/type-check first when available, then the smallest related behavioral guard; expand to integration only for a named boundary/risk, and reserve the full suite for repository-required, explicitly requested, or release gates.
 - After implementation, run `code-review` before final summary.
 - After review, use `/skill:git-rules` to prepare a commit-ready checkpoint and propose a Conventional Commit message.
 
@@ -183,7 +183,8 @@ Load only when needed:
 - `references/delegation-policy.md` — normative subagent routing, launch, control, fidelity, and claim-verification contract.
 - `references/legacy-refactor.md` — brownfield safety: characterization/golden tests to pin current behavior before refactoring untested code.
 - `references/research.md` — source-backed research flow using `pi-web-access` and `researcher`.
-- `references/diff-aware-testing.md` — mapping strategies, escalation, and the selection report for choosing which tests a diff needs.
+- `references/testing-strategy.md` — normative validation ladder: application-owned behavior, static-first ordering, focused-to-integration escalation, release-only full-suite default, sequential execution, specialized-test intent, and red/retry discipline.
+- `references/diff-aware-testing.md` — diff-to-guard mapping and evidence-driven escalation for choosing focused behavioral tests.
 - `references/artifact-lifecycle.md` — lifecycle classes, authority boundaries, and anti-drift rules.
 - `references/scratch-organization.md` — create-time gate, canonical Markdown destinations, one-effort scratch layout, naming, orphan detection, and close-out.
 - `references/response-shape.md` — the single normative source for final user-facing prose shape; governs only the prose wrapper, never tool payloads, evidence records, commits, tickets/specs/ADRs, handoff structure, subagent briefs, or exhaustive findings.

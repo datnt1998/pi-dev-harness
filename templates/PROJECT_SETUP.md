@@ -39,18 +39,21 @@ template:
 
 ## Validation
 
-Record exact commands and working directories. Use the repository's ecosystem; do not assume npm.
+Record exact commands and working directories. Use the repository's ecosystem; do not assume npm. The runtime policy lives in `/skill:engineering-workflow` → `references/testing-strategy.md`: static checks first when available, then the smallest related application-owned behavioral guard; broaden only for a named reason; run sequentially by default.
 
-| Scope | Working directory | Command | Required when |
+| Layer | Working directory | Command | Required when |
 |---|---|---|---|
-| Focused test | | | |
-| Full test | | | |
-| Type/static check | | | |
-| Lint/format check | | | |
-| Build/package | | | |
-| UI/manual smoke | | | |
+| Lint/format policy | | | Smallest affected scope; record unavailable instead of inventing tooling |
+| Type/static check | | | Smallest affected scope |
+| Focused behavioral test/repro | | | Default behavior proof |
+| Package/workspace test | | | Focused guard cannot bind the claim or fan-out requires it |
+| Integration test/smoke | | | Real boundary or declared tier blindness is load-bearing |
+| E2E/race/load/stress | | | Named risk, workload/seed, oracle, and cleanup plan |
+| Full test suite | | | Repository-required, explicitly requested, or release gate |
+| Build/package | | | Repository or release gate |
+| UI/manual smoke | | | Acceptance criterion lacks a runnable guard |
 
-For monorepos, tickets should state `Working directory:` and the smallest applicable validation commands. Root-wide checks are fallback/release gates, not the default for every slice.
+For monorepos, tickets should state `Working directory:` and the smallest applicable validation commands. Root-wide checks are repository/release gates, not the default for every slice. Record the project's bounded retry policy; every red requires diagnosis before rerun, and valid guards are never weakened merely to restore CI green.
 
 ## Git and review
 

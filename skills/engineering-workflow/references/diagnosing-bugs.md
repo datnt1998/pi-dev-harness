@@ -2,6 +2,8 @@
 
 A discipline for hard bugs, regressions, flakes, and performance failures. Skip phases only when explicitly justified. Adapted for Pi from mattpocock/skills (MIT).
 
+Follow `testing-strategy.md` for ownership boundaries, validation layers, sequential execution, specialized-test intent, and retry discipline. An expected test-first red that reaches its assertion and fails for the exact missing behavior is not an unexpected diagnostic failure; a wrong-reason, pre-existing, flaky, unrelated, environment, or recurring red is. Diagnosis may begin with the already-established tight red-capable loop instead of re-running static checks first; before completion, run the affected repository-native lint/type-check commands when available.
+
 When exploring the codebase, read `CONTEXT.md` (if it exists) for the mental model, and check ADRs in the area you're touching.
 
 ## Phase 1 — Build a feedback loop
@@ -35,7 +37,7 @@ A 30-second flaky loop is barely better than no loop; a 2-second deterministic o
 
 ### Non-deterministic bugs
 
-The goal is not a clean repro but a **higher reproduction rate**. Loop the trigger 100×, parallelise, add stress, narrow timing windows, inject sleeps. A 50%-flake bug is debuggable; 1% is not — keep raising the rate until it is.
+The goal is not a clean repro but a **higher reproduction rate**. Intentionally loop the trigger, parallelise only when concurrency is part of the suspected failure, add stress, narrow timing windows, or inject sleeps. Before doing so, name the concurrency/stress risk, seed or iteration bound, oracle, resource limits, and cleanup plan per `testing-strategy.md`. A 50%-flake bug is debuggable; 1% is not — keep raising the rate until it is.
 
 ### When you genuinely cannot build a loop
 
@@ -104,6 +106,8 @@ Required before declaring done:
 
 - [ ] Original repro no longer reproduces (re-run the Phase 1 loop)
 - [ ] Regression test passes (or absence of seam is documented)
+- [ ] Affected repository-native lint/type-check commands pass when available
+- [ ] Every rerun is tied to a recorded diagnosis/corrective action; no guard was weakened merely to restore green
 - [ ] All `[DEBUG-...]` instrumentation removed (grep the prefix)
 - [ ] Throwaway harnesses deleted (or clearly marked)
 - [ ] The winning hypothesis stated in the commit/PR message — so the next debugger learns

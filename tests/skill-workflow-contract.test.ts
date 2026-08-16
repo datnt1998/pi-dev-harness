@@ -88,6 +88,53 @@ test("diagnosis stops for a missing red-capable loop", () => {
   assert.match(diagnose, /access, captured artifact, or temporary instrumentation/i);
 });
 
+test("testing strategy enforces owned behavior, right-sized layers, and red discipline", () => {
+  const strategy = text("skills/engineering-workflow/references/testing-strategy.md");
+  assert.match(strategy, /Test behavior the application owns/i);
+  assert.match(strategy, /Static checks first/i);
+  assert.match(strategy, /Smallest related behavioral test/i);
+  assert.match(strategy, /Integration tests only when needed/i);
+  assert.match(strategy, /Full suite only at a release or repository-required gate/i);
+  assert.match(strategy, /Run checks sequentially/i);
+  for (const kind of ["E2E", "Race/concurrency", "Load", "Stress/soak"]) assert.match(strategy, new RegExp(`\\*\\*${kind.replace("/", "\\/")}`, "i"));
+  assert.match(strategy, /Expected TDD red/i);
+  assert.match(strategy, /Unexpected red/i);
+  assert.match(strategy, /Never:[\s\S]{0,250}weaken[\s\S]{0,120}make CI pass/i);
+});
+
+test("implementation records meaningful red-green evidence and explicit exceptions", () => {
+  const implementation = `${text("skills/engineering-workflow/references/implementation-tdd.md")}\n${text("skills/engineering-workflow/references/completion-evidence.md")}\n${text("prompts/implement.md")}`;
+  assert.match(implementation, /lint\/format-policy and type-check commands first/i);
+  assert.match(implementation, /intended missing behavior or exact symptom/i);
+  assert.match(implementation, /pure refactors[\s\S]{0,180}explicit exception/i);
+  assert.match(implementation, /Test cycle: not-applicable/i);
+  assert.match(implementation, /red <command \+ expected failure> → green <same command>/i);
+  assert.doesNotMatch(implementation, /full suite (?:at|near) the end when feasible/i);
+});
+
+test("expected TDD red is distinct from an unexpected retryable failure", () => {
+  const redDiscipline = `${text("skills/engineering-workflow/references/autonomous-execution.md")}\n${text("skills/engineering-workflow/references/diagnosing-bugs.md")}`;
+  assert.match(redDiscipline, /expected TDD red/i);
+  assert.match(redDiscipline, /wrong-reason, pre-existing, flaky, unrelated, environment, or recurring red/i);
+  assert.match(redDiscipline, /not a retry|not an unexpected diagnostic failure/i);
+});
+
+test("diff-aware testing supplements the public seam without automatic full-suite escalation", () => {
+  const selection = text("skills/engineering-workflow/references/diff-aware-testing.md");
+  assert.match(selection, /smallest behavioral checks/i);
+  assert.match(selection, /public seam covers the changed behavior/i);
+  assert.match(selection, /full suite only when/i);
+  assert.match(selection, /not an automatic command to run every test/i);
+  assert.doesNotMatch(selection, /first match wins/i);
+});
+
+test("falsification review keeps restoration checks gate-driven", () => {
+  const review = text("skills/engineering-workflow/references/code-review.md");
+  assert.match(review, /Final restoration check follows `testing-strategy\.md`/i);
+  assert.match(review, /whole-suite\/package gate only when repository policy, an explicit request, or a release gate requires it/i);
+  assert.doesNotMatch(review, /Full suite once, at the end/i);
+});
+
 test("wayfinder claims AFK research decision tickets before launch", () => {
   const wayfinder = `${text("skills/wayfinder/SKILL.md")}\n${text("prompts/wayfinder.md")}`;
   assert.match(wayfinder, /decision tickets/i);

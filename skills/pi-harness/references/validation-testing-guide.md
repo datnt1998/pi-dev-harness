@@ -48,8 +48,18 @@ Look for:
 
 ## Package Checks
 
-- `npm test` passes in the package.
-- `npm pack --dry-run` includes extensions, libs, skills, prompts, templates, README, and LICENSE.
-- Consumer SDK reload has zero extension/resource diagnostics and tool-name conflicts.
+Follow `../../engineering-workflow/references/testing-strategy.md`; discover repository-native commands rather than assuming npm. For this package's current declared scripts, the normal change ladder is:
+
+- run `npm run typecheck` first (no lint script is currently declared; do not invent one);
+- run the smallest related `node --experimental-strip-types --test <test-file>` check;
+- broaden to `npm test` only when the affected package surface or repository gate requires it;
+- reserve `npm run pack:check`, `npm run smoke:installed`, and `npm run smoke:packed` for packaging, integration/cutover, and release gates as applicable.
+
+Also verify:
+
+- `npm pack --dry-run` includes extensions, libs, skills, prompts, templates, README, and LICENSE when packaging is in scope.
+- Consumer SDK reload has zero extension/resource diagnostics and tool-name conflicts when package integration is in scope.
 - Copied local skill/prompt names are removed or backed up after package cutover.
 - Product identity, TUI/theme, memory implementation, credentials, and deploy rules stay in consumer-owned resources unless separately packaged.
+
+Run checks sequentially by default. Diagnose every red before a bounded rerun; never weaken a package or consumer guard merely to recover green.

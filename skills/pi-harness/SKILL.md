@@ -118,9 +118,11 @@ When editing Pi resources:
 
 Read `references/validation-testing-guide.md` for deeper checks. If an engineering workflow layer is present, validate that its prompts and skill names are documented and reusable.
 
-Minimum checks:
+Minimum checks (selected through `../engineering-workflow/references/testing-strategy.md` and `references/validation-testing-guide.md`):
 
-- Does `/reload` succeed?
+- Do repository-native lint/type-check commands pass when available?
+- Does the smallest related harness test pass?
+- Does `/reload` succeed when resource integration is in scope?
 - Do new commands appear in slash autocomplete?
 - Are new skills triggerable through `/skill:<name>`?
 - Do custom tools avoid name conflicts?

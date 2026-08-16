@@ -18,7 +18,7 @@ A coding harness is incomplete unless it answers:
 1. How do we clarify ambiguous work?
 2. How do we turn discussion into a spec?
 3. How do we split work into small tickets?
-4. How do we implement with feedback loops?
+4. How do we select and order validation so application-owned behavior is checked at the smallest binding layer?
 5. How do we review independently?
 6. How do we hand off long-running context?
 
@@ -77,7 +77,7 @@ The surrounding workflow still owns the producer/reviewer sequence: validation c
 
 - Are engineering workflow commands documented in `AGENTS.md`?
 - Are prompt/skill names reusable across projects?
-- Do implementation prompts define a validation contract and complete the review/fix loop before final summary?
+- Do implementation prompts point to `../../engineering-workflow/references/testing-strategy.md` and define a validation contract: static checks first when available, smallest related behavioral guard, evidence-driven integration, full suites at repository-required/requested/release gates, sequential execution, intentional specialized tests, and diagnosed retries?
 - Does code review separate the falsification and adversarial-authority axes while preserving evidence through parent synthesis?
 - Are async, fresh/fork, parent authority, single-writer, and escalation semantics documented on demand?
 - Do docs artifacts have default paths (`CONTEXT.md`, `docs/adr/`, `docs/specs/`, `.scratch/`)?

@@ -2,6 +2,7 @@
 
 - Use `/skill:engineering-workflow` for engineering work and `/skill:pi-harness` for Pi resources.
 - Approved reversible work runs end-to-end without intermediate confirmation; safety stop conditions remain mandatory.
+- Validation follows `/skill:engineering-workflow` → `references/testing-strategy.md`: application-owned behavior, repository-native lint/type-check first when available, smallest related behavioral guard next, evidence-driven integration, full suites only at repository-required/requested/release gates, sequential execution by default, and diagnosed retries without weakened guards.
 - Reports follow the response-shape contract (/skill:engineering-workflow → references/response-shape.md); the reference is normative.
 - Use `/implement-all <tickets-or-manifest> [--commit]` for autonomous batches; `/implementation-status [--verbose]`; `/implement-all-stop`.
 - `safe-ops` is a narrow model-tool guardrail, not a sandbox.

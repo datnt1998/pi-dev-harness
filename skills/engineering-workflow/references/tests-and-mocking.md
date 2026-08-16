@@ -1,6 +1,6 @@
 # Tests and Mocking
 
-What a good test is, where tests go, and when to mock. Adapted for Pi from mattpocock/skills (MIT).
+What a good test is, where tests go, and when to mock. Adapted for Pi from mattpocock/skills (MIT). `testing-strategy.md` owns selection/order/escalation and `implementation-tdd.md` owns the red/green implementation loop; this file owns guard quality and fidelity.
 
 ## Good tests
 
@@ -16,7 +16,7 @@ test("user can checkout with valid cart", async () => {
 });
 ```
 
-Characteristics: tests behavior callers care about; uses public API only; survives internal refactors; describes WHAT, not HOW; one logical assertion per test.
+Characteristics: tests behavior callers care about; uses public API only; survives internal refactors; describes WHAT, not HOW; one logical assertion per test. A compiler/type assertion is a valid public seam when the application-owned contract is compile-time or type-level.
 
 ## Bad tests
 

@@ -29,7 +29,7 @@ Continue independent approved work before stopping. Never guess past a safety bo
 
 ## Red discipline
 
-A red check is evidence, never noise: diagnose it to root cause before touching it again. Never re-roll a red hoping it turns green; a recorded diagnosis is required before any retry. Once a recorded flake is fixed, its color is believed again — re-rolling a repaired check is a violation, not caution. See `diagnosing-bugs.md` for the diagnosis loop; this section does not restate it.
+A red check is evidence, never noise. An expected TDD red—where the focused guard reaches its assertion and fails for the intended missing behavior—authorizes the minimal implementation and is not a retry. For a wrong-reason, pre-existing, flaky, unrelated, environment, or recurring red, read and preserve its output, diagnose it to root cause before touching it again, and record the corrective action or evidenced transient policy before any bounded retry. Never re-roll a red hoping it turns green. Never weaken, delete, skip, quarantine, loosen, replace, or reduce the fidelity of a valid guard merely to make CI pass; snapshot/golden updates require independent confirmation that the new output is intended. Once a recorded flake is fixed, its color is believed again — re-rolling a repaired check is a violation, not caution. See `testing-strategy.md` and `diagnosing-bugs.md`; this section does not restate them.
 
 ## Questions
 
